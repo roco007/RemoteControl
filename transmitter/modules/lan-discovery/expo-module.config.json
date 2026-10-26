@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {"modules": ["LanDiscoveryModule"]},
+  "android": {"modules": ["com.remotemac.discovery.LanDiscoveryModule"]}
+}

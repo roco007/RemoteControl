@@ -1,0 +1,31 @@
+{
+  "name": "remote-mac-control",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "transmitter"
+  ],
+  "scripts": {
+    "start": "npm run start --workspace transmitter",
+    "web": "npm run web --workspace transmitter",
+    "typecheck": "tsc --noEmit -p transmitter/tsconfig.json",
+    "test": "vitest run",
+    "test:receiver": "bash receiver/scripts/test.sh",
+    "test:integration": "swift build --package-path receiver --product ReceiverIntegrationHarness && node --test scripts/integration.test.mjs",
+    "receiver": "bash receiver/scripts/run.sh",
+    "build:receiver": "bash receiver/scripts/package.sh",
+    "sync:receiver": "bash receiver/scripts/sync.sh",
+    "protocol:generate": "node shared/generate.mjs",
+    "protocol:check": "node shared/generate.mjs --check",
+    "check": "npm run protocol:check && npm run typecheck && npm test && npm run test:receiver"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.5",
+    "ws": "^8.18.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Transmitter: Build Android APK (EAS)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "eas build --platform android --profile preview --wait",
+      "cwd": "${workspaceFolder}/transmitter"
+    },
+    {
+      "name": "Receiver: Sync latest code and restart",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run sync:receiver",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

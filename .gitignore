@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+dist/
+dist-native/
+.DS_Store
+receiver/.build/
+transmitter/ios/
+transmitter/android/
+*.log
+.env*
+!.env.example
+coverage/

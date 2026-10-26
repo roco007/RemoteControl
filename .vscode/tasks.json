@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Transmitter: Build Android APK (EAS)",
+			"type": "shell",
+			"command": "cd transmitter && eas build --platform android --profile preview --wait",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

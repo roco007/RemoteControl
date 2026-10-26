@@ -1,0 +1,428 @@
+{
+  "valid": [
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "connection",
+      "state": "hello",
+      "serverId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "name": "MacBook",
+      "permission": false,
+      "capabilities": [
+        "mouse",
+        "keyboard"
+      ]
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "authentication",
+      "deviceId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "deviceName": "Phone",
+      "code": "123456"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "authentication",
+      "deviceId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "deviceName": "Phone",
+      "token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "authentication_result",
+      "ok": true,
+      "serverId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "permission": true,
+      "token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "authentication_result",
+      "ok": false,
+      "serverId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "permission": false,
+      "error": "Invalid code"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_move",
+      "dx": 12.5,
+      "dy": -4
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_down",
+      "button": "left"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_up",
+      "button": "left"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_click",
+      "button": "right",
+      "count": 2
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_scroll",
+      "dx": -20,
+      "dy": 30
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_gesture",
+      "gesture": "zoom",
+      "amount": 0.2
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_gesture",
+      "gesture": "swipe",
+      "direction": "left",
+      "fingers": 3
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "keyboard_down",
+      "key": "c",
+      "modifiers": [
+        "command"
+      ],
+      "repeat": false
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "keyboard_up",
+      "key": "c",
+      "modifiers": [
+        "command"
+      ]
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "keyboard_text",
+      "text": "Hello 👋 नमस्ते"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "release_all"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "ping",
+      "id": "heartbeat-1"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "pong",
+      "id": "heartbeat-1"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "error",
+      "code": "permission_required",
+      "message": "Enable Accessibility"
+    }
+  ],
+  "invalid": [
+    null,
+    [],
+    {},
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "unrecognized"
+    },
+    {
+      "v": 2,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_move",
+      "dx": 12.5,
+      "dy": -4
+    },
+    {
+      "v": 1,
+      "seq": -1,
+      "timestamp": 123456789,
+      "type": "mouse_move",
+      "dx": 12.5,
+      "dy": -4
+    },
+    {
+      "v": 1,
+      "seq": 1.5,
+      "timestamp": 123456789,
+      "type": "mouse_move",
+      "dx": 12.5,
+      "dy": -4
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": "now",
+      "type": "mouse_move",
+      "dx": 12.5,
+      "dy": -4
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_move",
+      "dx": 1001,
+      "dy": -4
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_move",
+      "dx": true,
+      "dy": -4
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_move",
+      "dx": 12.5,
+      "dy": null
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_move",
+      "dx": 12.5,
+      "dy": -4,
+      "unexpected": 1
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "authentication",
+      "deviceId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "deviceName": "Phone",
+      "code": "12345"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "authentication",
+      "deviceId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "deviceName": "Phone",
+      "code": "123456",
+      "token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "authentication",
+      "deviceId": "anything",
+      "deviceName": "Phone",
+      "code": "123456"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "authentication",
+      "deviceId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "deviceName": "Phone",
+      "token": "bad"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_click",
+      "button": "right",
+      "count": 3
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_down",
+      "button": "unknown"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_gesture",
+      "gesture": "zoom",
+      "amount": 2
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_gesture",
+      "gesture": "zoom",
+      "amount": 0.2,
+      "direction": "left"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "mouse_gesture",
+      "gesture": "swipe",
+      "direction": "left",
+      "fingers": 1
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "keyboard_down",
+      "key": "shell",
+      "modifiers": [
+        "command"
+      ],
+      "repeat": false
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "keyboard_down",
+      "key": "c",
+      "modifiers": [
+        "command",
+        "command"
+      ],
+      "repeat": false
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "keyboard_down",
+      "key": "c",
+      "modifiers": [
+        "command"
+      ],
+      "repeat": "true"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "keyboard_up",
+      "key": "c",
+      "modifiers": [
+        "fn"
+      ]
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "keyboard_text",
+      "text": ""
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "keyboard_text",
+      "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "connection",
+      "state": "hello",
+      "serverId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "name": "MacBook",
+      "permission": 1,
+      "capabilities": [
+        "mouse",
+        "keyboard"
+      ]
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "connection",
+      "state": "hello",
+      "serverId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "name": "MacBook",
+      "permission": false,
+      "capabilities": "mouse"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "authentication_result",
+      "ok": 1,
+      "serverId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "permission": true,
+      "token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "error",
+      "code": "permission_required",
+      "message": ""
+    }
+  ],
+  "malformed": [
+    "{",
+    "not json",
+    "{\"type\":",
+    ""
+  ]
+}

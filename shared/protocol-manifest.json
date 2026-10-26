@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "defaultPort": 9876,
+  "serviceType": "_remotemac._tcp",
+  "nativeClientOrigin": "remote-mac-control://native",
+  "maxMessageBytes": 16384,
+  "maxDelta": 1000,
+  "maxTextLength": 1024,
+  "messageTypes": ["connection", "authentication", "authentication_result", "mouse_move", "mouse_down", "mouse_up", "mouse_click", "mouse_scroll", "mouse_gesture", "keyboard_down", "keyboard_up", "keyboard_text", "release_all", "ping", "pong", "error"],
+  "buttons": ["left", "right", "middle"],
+  "modifiers": ["shift", "control", "option", "command"],
+  "gestures": ["zoom", "swipe"],
+  "directions": ["left", "right", "up", "down"],
+  "keys": ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","0","1","2","3","4","5","6","7","8","9","space","enter","backspace","delete","tab","escape","shift","control","option","command","caps_lock","left","right","up","down","home","end","page_up","page_down","f1","f2","f3","f4","f5","f6","f7","f8","f9","f10","f11","f12","minus","equal","bracket_left","bracket_right","backslash","semicolon","quote","comma","period","slash","backtick"]
+}
