@@ -18,6 +18,7 @@ private final class TopAlignedClipView: NSClipView {
 final class ReceiverWindow: NSWindowController, NSWindowDelegate {
     private let server: ReceiverServer
     private let statusLabel = NSTextField(labelWithString: "Starting receiver…")
+    private let bluetoothLabel = NSTextField(labelWithString: "Starting Bluetooth…")
     private let codeLabel = NSTextField(labelWithString: "••••••")
     private let expiresLabel = NSTextField(labelWithString: "")
     private let permissionLabel = NSTextField(wrappingLabelWithString: "Checking Accessibility…")
@@ -28,7 +29,7 @@ final class ReceiverWindow: NSWindowController, NSWindowDelegate {
 
     init(server: ReceiverServer) {
         self.server = server
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 740), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 790), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "Remote Mac Control"; window.center(); window.isReleasedWhenClosed = false
         super.init(window: window); window.delegate = self
         build(in: window)
@@ -44,8 +45,10 @@ final class ReceiverWindow: NSWindowController, NSWindowDelegate {
         stack.addArrangedSubview(heading)
         statusLabel.font = .systemFont(ofSize: 14, weight: .medium); statusLabel.textColor = .systemGreen
         stack.addArrangedSubview(statusLabel)
+        bluetoothLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        stack.addArrangedSubview(bluetoothLabel)
         let addresses = LocalNetwork.advertisedAddresses()
-        let connectionText = addresses.isEmpty ? "Connect this Mac to Wi-Fi to see its address." : addresses.map { "\($0):\(server.port)" }.joined(separator: "   ·   ")
+        let connectionText = addresses.isEmpty ? "No Wi-Fi address. Use Bluetooth or join a local network." : addresses.map { "\($0):\(server.port)" }.joined(separator: "   ·   ")
         let addressLabel = label(connectionText, size: 13); addressLabel.isSelectable = true
         stack.addArrangedSubview(addressLabel)
         stack.addArrangedSubview(label("Bonjour: \(server.name)  •  \(Wire.serviceType)", size: 11, color: .secondaryLabelColor))
@@ -82,18 +85,19 @@ final class ReceiverWindow: NSWindowController, NSWindowDelegate {
         devicesStack.addArrangedSubview(label("No trusted phones yet.", size: 12, color: .secondaryLabelColor))
         errorLabel.font = .systemFont(ofSize: 12); errorLabel.textColor = .systemRed
         stack.addArrangedSubview(errorLabel)
-        let note = label("Use a trusted private network. Input traffic is local and unencrypted.\nClosing this window keeps the receiver in the menu bar.", size: 11, color: .secondaryLabelColor)
-        note.maximumNumberOfLines = 2; stack.addArrangedSubview(note)
+        let note = label("Wi-Fi traffic is unencrypted; use a trusted private network.\nBluetooth requires encrypted pairing and this app's code.\nClosing this window keeps the receiver in the menu bar.", size: 11, color: .secondaryLabelColor)
+        note.maximumNumberOfLines = 3; stack.addArrangedSubview(note)
     }
 
     func update(_ snapshot: ReceiverServer.Snapshot) {
-        statusLabel.stringValue = snapshot.status
+        statusLabel.stringValue = "Wi-Fi: \(snapshot.status)"
+        bluetoothLabel.stringValue = "Bluetooth: \(snapshot.bluetoothStatus)"
         codeLabel.stringValue = snapshot.code
         let remaining = max(0, Int(snapshot.expiresAt.timeIntervalSinceNow))
         expiresLabel.stringValue = "Enter this code in the phone app. Expires in \(remaining)s."
         permissionLabel.stringValue = snapshot.permission ? "Allowed. This Mac can receive mouse and keyboard input." : "Permission required. Enable Remote Mac Control in Accessibility to let your phone move the cursor and type."
         permissionLabel.textColor = snapshot.permission ? .systemGreen : .systemOrange
-        sessionLabel.stringValue = snapshot.deviceName.map { "Connected: \($0)" } ?? "No phone connected"
+        sessionLabel.stringValue = snapshot.deviceName.map { "\($0) · \(snapshot.activeTransport?.rawValue ?? "Connected")" } ?? "No phone connected"
         errorLabel.stringValue = snapshot.error ?? ""
         if snapshot.devices != lastDevices {
             lastDevices = snapshot.devices

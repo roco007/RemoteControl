@@ -94,7 +94,7 @@ function setupGestures() {
   const engine = new InputEngine(packet => { packets.push(packet); return true; });
   const interpreter = new GestureInterpreter(engine, () => ({
     pointerSensitivity: 1, scrollSensitivity: 1, naturalScroll: true,
-    tapToClick: true, twoFingerRightClick: true, haptics: false, host: '', port: 9876,
+    tapToClick: true, twoFingerRightClick: true, haptics: false, host: '', port: 9876, transportMode: 'automatic',
   }));
   createTrackpadGesture(interpreter);
   const pan = recognizers.find(r => r.kind === 'pan' && r.config.minPointers === 2)!;

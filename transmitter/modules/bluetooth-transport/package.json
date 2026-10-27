@@ -1,0 +1,7 @@
+{
+  "name": "bluetooth-transport",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "description": "Native BLE transport for Remote Mac development and release builds"
+}

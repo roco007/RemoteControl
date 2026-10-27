@@ -13,12 +13,12 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
             guard let port = UInt16(configured), port > 0 else { throw StartupError.invalidPort }
             let pairing = try PairingManager(store: KeychainTrustStore())
             let origins = Set((ProcessInfo.processInfo.environment["REMOTE_MAC_ALLOWED_ORIGINS"] ?? "").split(separator: ",").map(String.init))
-            let server = ReceiverServer(port: port, pairing: pairing, sink: NativeInput(), origins: origins)
+            let server = ReceiverServer(port: port, pairing: pairing, sink: NativeInput(), origins: origins, bluetoothEnabled: true)
             self.server = server
             let controller = ReceiverWindow(server: server); self.receiverWindow = controller
             server.onUpdate = { [weak self, weak controller] snapshot in
                 controller?.update(snapshot)
-                self?.statusItem?.button?.toolTip = snapshot.deviceName.map { "Remote Mac: \($0) connected" } ?? "Remote Mac: \(snapshot.status)"
+                self?.statusItem?.button?.toolTip = snapshot.deviceName.map { "Remote Mac: \($0) connected via \(snapshot.activeTransport?.rawValue ?? "local connection")" } ?? "Remote Mac: Wi-Fi \(snapshot.status) · Bluetooth \(snapshot.bluetoothStatus)"
             }
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
             item.button?.image = NSImage(systemSymbolName: "computermouse", accessibilityDescription: "Remote Mac Control")
@@ -50,7 +50,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
 }
 
 if CommandLine.arguments.contains("--diagnostics") {
-    let data = try JSONSerialization.data(withJSONObject: ["permission": AXIsProcessTrusted(), "addresses": LocalNetwork.advertisedAddresses(), "port": Wire.defaultPort, "protocolVersion": Wire.version, "serviceType": Wire.serviceType], options: [.prettyPrinted, .sortedKeys])
+    let data = try JSONSerialization.data(withJSONObject: ["permission": AXIsProcessTrusted(), "addresses": LocalNetwork.advertisedAddresses(), "port": Wire.defaultPort, "protocolVersion": Wire.version, "serviceType": Wire.serviceType, "bluetoothServiceUUID": BluetoothWire.serviceUUID], options: [.prettyPrinted, .sortedKeys])
     print(String(decoding: data, as: UTF8.self))
 } else if CommandLine.arguments.contains("--verify-input") {
     let app = NSApplication.shared

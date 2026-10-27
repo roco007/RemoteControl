@@ -2,6 +2,30 @@
 
 Recorded during development on **26 October 2026**. This record distinguishes source/build checks, a real native loopback connection, actual app UI/input, and the physical-phone checks still required.
 
+## Bluetooth backup addition (27 October 2026)
+
+- `npm run check`: protocol generation, TypeScript, **143 tests across 11 TypeScript suites**, and **44 Swift tests across 8 suites** passed.
+- `npm run test:integration`: **10 native WebSocket integration results passed** against the recording harness. Existing JSON v1 and WebSocket behavior remain covered.
+- `bash transmitter/modules/bluetooth-transport/tests/test-apple.sh`: all UTF-8 fragmentation, size and malformed frame checks passed; available CoreBluetooth types checked and the Expo Swift wrapper parsed. This is not a compiled iOS app.
+- `npm run build:receiver`: release package, signing and strict signature verification passed. The actual rebuilt app was launched; its visible window showed **Wi-Fi: Ready for a phone**, **Bluetooth: Ready for a phone**, and **192.168.0.105:9876**. Its existing Accessibility grant was refreshed after the ad hoc rebuild and the window showed **Allowed**. The existing trusted Android phone entry remained present.
+- A read-only WebSocket connection to **192.168.0.105:9876** using the existing native Origin received a valid `connection/hello` with `permission: true`; no production input or test pairing was sent.
+- Web export succeeded. The visible browser UI exercised Automatic, Wi-Fi and Bluetooth selection and explicitly reported Bluetooth unavailable in the browser. Against a separate loopback recording harness, pairing, permission-required → connected, Wi-Fi status/IP, double-click, Control-Left, Command-C and Unicode submission were verified. The sink recorded exactly one expected sequence for each action. Temporary browser pairing/address and the harness were removed; the production trusted-device list was not changed.
+- Native Apple and Android autolinking found the new local module. No new npm dependencies were added.
+
+At the initial implementation check, no phone was attached and native phone compilation/installation and over-the-air BLE behavior were not established. The USB follow-up below supersedes those Android installation/connection limits. This environment still lacks full Xcode/iOS SDK, a Java runtime and Android SDK. The implementation must pass the remaining physical checklist in [BLUETOOTH.md](BLUETOOTH.md) before claiming all acceptance criteria are complete. Use a standalone preview/release build when switching Wi-Fi off so Metro is not a dependency.
+
+### Android GATT 22 follow-up (27 October 2026)
+
+Tested the user's installed native `com.remotemac.transmitter` app, version 1.0.0 / versionCode 1 (last updated 01:53:09 IST), on a USB-connected Nothing A024 running Android 16, against the packaged receiver on macOS 26.6.2. Nearby devices permissions were already granted. USB provided diagnostics and a scrcpy mirror; the control session itself used Bluetooth.
+
+- Earlier Android logs showed failed OS bonding attempts and an authentication-error disconnect. GATT 22 identifies local-host termination; the status alone does not establish the underlying cause. Later Mac logs confirmed an encrypted link and successful application authentication at 01:58:34 IST.
+- After the app returned to the foreground at 02:02:06, Android established GATT successfully, discovered the service, negotiated MTU 517 and subscribed to notifications. The phone showed **Connected · myserver / Transport: Bluetooth**; the Mac showed **Android phone · Bluetooth** and Accessibility **Allowed**.
+- That session remained authenticated for more than three minutes with successful five-second ping/pong exchanges. Observed phone RTT readings were approximately 35–47 ms; this is a short heartbeat sample, not a sustained input-latency benchmark.
+- A short drag on the real phone's touch surface through the USB mirror produced 20 `mouse_move` commands marked `dispatched` in the Mac's shared input pipeline. This verifies native Android → over-the-air BLE → receiver input dispatch; full real-application click/scroll/gesture/keyboard acceptance remains pending.
+- No app source, native configuration, pairing records or Wi-Fi settings were changed to obtain this successful connection. The installed app was not rebuilt or replaced during this follow-up. Wi-Fi remained configured as **192.168.0.105:9876**.
+
+Still pending: iOS native execution; fresh-pairing cancellation/recovery testing; all six radio/failover scenarios; rapid repeated transport switches; real-application clicks, scrolling, gestures and typing over BLE; sustained latency and battery checks. Earlier rapid Android reconnects did not consistently produce a fresh Mac session before background/foreground recovery, so this successful session is not proof that every reconnect case is resolved.
+
 ## Environment inspected
 
 | Item | Observed |
@@ -63,7 +87,7 @@ The user subsequently reported that multi-finger system navigation was not worki
 
 ## Not yet verified
 
-- A compiled iOS or Android development/preview build on a physical phone.
+- A compiled iOS development/preview build on a physical phone. Native Android installation and BLE connection were verified in the GATT 22 follow-up above.
 - Phone discovery of the Mac through mDNS and real local-network permission prompts.
 - iPhone connectivity and Android connectivity on other access points/firewall configurations.
 - Physical one/two/three/four-finger recognition, drag arbitration, pinch/scroll arbitration, haptics and landscape ergonomics.

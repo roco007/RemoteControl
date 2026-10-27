@@ -8,7 +8,6 @@ public final class ReceiverServer {
     private var timer: DispatchSourceTimer?
     private var sessions: [UUID: ReceiverSession] = [:]
     private var connections: [UUID: NWConnection] = [:]
-    private var controller: UUID?
     private let sink: InputSink
     public let pairing: PairingManager
     public let serverID: String
@@ -20,6 +19,10 @@ public final class ReceiverServer {
     private let origins: Set<String>
     private let permission: () -> Bool
     private let loopbackOnly: Bool
+    private let bluetoothEnabled: Bool
+    private var bluetooth: BluetoothPeripheral?
+    private var bluetoothStatus = "Disabled"
+    private lazy var coordinator = ReceiverSessionCoordinator(pairing: pairing, sink: sink, serverID: serverID, name: name, permission: permission)
     private var listeningPort: UInt16 = 0
 
     public struct Snapshot {
@@ -29,12 +32,15 @@ public final class ReceiverServer {
         public var expiresAt: Date
         public var permission: Bool
         public var deviceName: String?
+        public var activeTransport: ReceiverTransport?
+        public var bluetoothStatus: String
         public var devices: [TrustedDevice]
         public var error: String?
     }
 
-    public init(port: UInt16, pairing: PairingManager, sink: InputSink, origins: Set<String> = [], permission: @escaping () -> Bool = { AXIsProcessTrusted() }, loopbackOnly: Bool = false, identity: String? = nil) {
+    public init(port: UInt16, pairing: PairingManager, sink: InputSink, origins: Set<String> = [], permission: @escaping () -> Bool = { AXIsProcessTrusted() }, loopbackOnly: Bool = false, identity: String? = nil, bluetoothEnabled: Bool = false) {
         self.port = port; self.pairing = pairing; self.sink = sink; self.origins = origins; self.permission = permission; self.loopbackOnly = loopbackOnly
+        self.bluetoothEnabled = bluetoothEnabled && !loopbackOnly
         name = String((Host.current().localizedName ?? "Mac").prefix(80))
         let key = "RemoteMacServerUUID"
         serverID = identity ?? UserDefaults.standard.string(forKey: key) ?? UUID().uuidString.lowercased()
@@ -42,6 +48,25 @@ public final class ReceiverServer {
     }
     public func start() { queue.async { [weak self] in self?.startOnQueue() } }
     private func startOnQueue() {
+        guard timer == nil else { return }
+        coordinator.onChange = { [weak self] in self?.publish() }
+        // Bluetooth and session deadlines remain available even if the TCP listener fails.
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(250))
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            do { try self.pairing.refreshCodeIfNeeded() } catch { self.lastError = "Could not generate a pairing code." }
+            self.coordinator.tick(); self.bluetooth?.tick(); self.publish()
+        }
+        timer.resume(); self.timer = timer
+        if bluetoothEnabled {
+            let bluetooth = BluetoothPeripheral(queue: queue, name: name) { [weak self] send, cancel in
+                self?.coordinator.makeSession(transport: .bluetooth, send: send, cancel: cancel)
+            }
+            self.bluetooth = bluetooth
+            bluetooth.onStatus = { [weak self] value in self?.bluetoothStatus = value; self?.publish() }
+            bluetooth.start()
+        }
         let options = NWProtocolWebSocket.Options()
         options.autoReplyPing = true; options.maximumMessageSize = Wire.maxMessageBytes
         let allowedOrigins = origins
@@ -74,28 +99,14 @@ public final class ReceiverServer {
             }
             listener.newConnectionHandler = { [weak self] connection in self?.accept(connection) }
             listener.start(queue: queue)
-            let timer = DispatchSource.makeTimerSource(queue: queue)
-            timer.schedule(deadline: .now(), repeating: 1)
-            timer.setEventHandler { [weak self] in
-                guard let self else { return }
-                do { try self.pairing.refreshCodeIfNeeded() } catch { self.lastError = "Could not generate a pairing code." }
-                for session in Array(self.sessions.values) { session.tick() }
-                self.publish()
-            }
-            timer.resume(); self.timer = timer
         } catch { status = "Receiver unavailable"; lastError = error.localizedDescription; publish() }
     }
 
     private func accept(_ connection: NWConnection) {
-        guard LocalNetwork.isAllowed(connection.endpoint), connections.count < 8 else { connection.cancel(); return }
+        guard LocalNetwork.isAllowed(connection.endpoint), coordinator.count < 8 else { connection.cancel(); return }
         let connectionID = UUID()
         connections[connectionID] = connection
-        let session = ReceiverSession(pairing: pairing, input: InputController(sink: sink), serverID: serverID, name: name,
-            permission: permission,
-            acquire: { [weak self] id in
-                guard let self, self.controller == nil || self.controller == id else { return false }
-                self.controller = id; return true
-            }, relinquish: { [weak self] id in if self?.controller == id { self?.controller = nil } },
+        guard let session = coordinator.makeSession(transport: .wifi,
             send: { [weak self, weak connection] data in
                 guard let connection else { return }
                 let context = NWConnection.ContentContext(identifier: "json", metadata: [NWProtocolWebSocket.Metadata(opcode: .text)])
@@ -107,9 +118,8 @@ public final class ReceiverServer {
                 self?.sessions.removeValue(forKey: connectionID)
                 self?.connections.removeValue(forKey: connectionID)
                 self?.queue.asyncAfter(deadline: .now() + 0.1) { connection?.cancel() }
-            })
+            }) else { connections.removeValue(forKey: connectionID); connection.cancel(); return }
         sessions[connectionID] = session
-        session.onChange = { [weak self] in self?.publish() }
         connection.stateUpdateHandler = { [weak self, weak session] state in
             guard let self, let session else { return }
             switch state {
@@ -140,13 +150,12 @@ public final class ReceiverServer {
     }
 
     public func disconnectController() { queue.async { [weak self] in
-        guard let self else { return }; for session in Array(self.sessions.values) where session.authenticated { session.disconnect() }; self.publish()
+        guard let self else { return }; self.coordinator.disconnectController(); self.publish()
     } }
     public func revoke(_ id: String) { queue.async { [weak self] in
         guard let self else { return }
         do {
-            try self.pairing.revoke(id)
-            for session in Array(self.sessions.values) where session.deviceID == id { session.revoke() }
+            try self.coordinator.revoke(id)
             self.lastError = nil
         } catch { self.lastError = error.localizedDescription }
         self.publish()
@@ -157,14 +166,13 @@ public final class ReceiverServer {
     public func stop() {
         queue.sync {
             timer?.cancel(); timer = nil
-            for session in Array(sessions.values) { session.disconnect() }
+            coordinator.disconnectAll(); bluetooth?.stop(); bluetooth = nil
             for connection in connections.values { connection.cancel() }
             connections.removeAll(); listener?.cancel(); listener = nil
         }
     }
     private func publish() {
-        let active = sessions.values.first { $0.authenticated }
-        let snapshot = Snapshot(port: listeningPort, status: status, code: pairing.code, expiresAt: pairing.codeExpiresAt, permission: permission(), deviceName: active?.deviceName, devices: pairing.devices, error: lastError)
+        let snapshot = Snapshot(port: listeningPort, status: status, code: pairing.code, expiresAt: pairing.codeExpiresAt, permission: permission(), deviceName: coordinator.activeSession?.deviceName, activeTransport: coordinator.activeTransport, bluetoothStatus: bluetoothStatus, devices: pairing.devices, error: lastError)
         DispatchQueue.main.async { [weak self] in self?.onUpdate?(snapshot) }
     }
     private enum ServerError: Error { case invalidPort }

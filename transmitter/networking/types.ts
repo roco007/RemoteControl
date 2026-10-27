@@ -1,3 +1,4 @@
+import type { TransportKind, TransportMode, BluetoothPeer } from './Transport';
 import type { Endpoint } from './endpoint';
 export type { Endpoint } from './endpoint';
 
@@ -11,6 +12,11 @@ export interface CredentialStore {
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'authentication_required' | 'permission_required' | 'connected' | 'reconnecting' | 'error';
 export interface ConnectionSnapshot {
   status: ConnectionStatus;
+  transport?: TransportKind;
+  mode?: TransportMode;
+  bluetooth?: BluetoothPeer;
+  retryable?: boolean;
+  failureCode?: string;
   message?: string;
   serverName?: string;
   serverId?: string;

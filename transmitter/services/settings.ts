@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PROTOCOL } from '../../shared/protocol';
+import type { BluetoothPeer, TransportMode } from '../networking/Transport';
+import type { ConnectionConfiguration } from '../networking/ConnectionManager';
 
 export interface Settings {
   pointerSensitivity: number;
@@ -10,12 +12,14 @@ export interface Settings {
   haptics: boolean;
   host: string;
   port: number;
+  transportMode: TransportMode;
+  bluetooth?: BluetoothPeer;
 }
 
 export const defaultSettings: Settings = {
   pointerSensitivity: 1.2, scrollSensitivity: 1, naturalScroll: true,
   tapToClick: true, twoFingerRightClick: true, haptics: true,
-  host: '', port: PROTOCOL.defaultPort,
+  host: '', port: PROTOCOL.defaultPort, transportMode: 'automatic',
 };
 const STORAGE_KEY = 'remote-mac.settings.v1';
 
@@ -32,7 +36,19 @@ export function sanitizeSettings(value: unknown): Settings {
   }
   if (typeof v.host === 'string' && v.host.length <= 253) result.host = v.host;
   if (typeof v.port === 'number' && Number.isInteger(v.port) && v.port > 0 && v.port < 65536) result.port = v.port;
+  if (v.transportMode === 'automatic' || v.transportMode === 'wifi' || v.transportMode === 'bluetooth') result.transportMode = v.transportMode;
+  if (v.bluetooth && typeof v.bluetooth === 'object') {
+    const peer = v.bluetooth as Record<string, unknown>;
+    if (typeof peer.id === 'string' && peer.id.length > 0 && peer.id.length <= 128 && typeof peer.name === 'string' && peer.name.length <= 80) {
+      result.bluetooth = { id: peer.id, name: peer.name };
+      if (typeof peer.serverId === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(peer.serverId)) result.bluetooth.serverId = peer.serverId;
+    }
+  }
   return result;
+}
+
+export function connectionConfiguration(settings: Settings): ConnectionConfiguration {
+  return { mode: settings.transportMode, endpoint: settings.host.trim() ? { host: settings.host.trim(), port: settings.port } : undefined, bluetooth: settings.bluetooth };
 }
 
 export async function loadSettings(): Promise<Settings> {

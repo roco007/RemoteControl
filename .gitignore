@@ -1,12 +1,56 @@
+# Dependencies and Expo's generated app projects
 node_modules/
 .expo/
+/transmitter/ios/
+/transmitter/android/
+
+# Exported apps and distributable builds (including macOS code signatures)
 dist/
 dist-native/
-.DS_Store
-receiver/.build/
-transmitter/ios/
-transmitter/android/
-*.log
+web-build/
+*.app/
+*.dSYM/
+*.xcarchive/
+*.apk
+*.aab
+*.ipa
+*.dmg
+
+# Swift/Xcode and local Expo module build output; keep native module source
+/receiver/.build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+.gradle/
+.kotlin/
+/transmitter/modules/*/android/build/
+/transmitter/modules/*/android/.cxx/
+
+# Test, bundler, TypeScript and icon-generator caches
+coverage/
+.nyc_output/
+.vite/
+*.tsbuildinfo
+.metro-health-check*
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local environment and signing credentials; keep shareable examples
 .env*
 !.env.example
-coverage/
+!.env.*.example
+/transmitter/credentials.json
+*.keystore
+*.jks
+*.p12
+*.p8
+*.mobileprovision
+*.provisionprofile
+
+# OS/editor temporary files and logs; keep shared .vscode configurations
+.DS_Store
+._*
+*.swp
+*.swo
+*.log

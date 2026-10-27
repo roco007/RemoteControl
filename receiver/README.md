@@ -18,6 +18,8 @@ The bundle is signed ad hoc by default. Set `REMOTE_MAC_SIGNING_IDENTITY` to you
 
 Enable **Remote Mac Control** in **System Settings → Privacy & Security → Accessibility**. The receiver checks permission continuously, reports its status to the phone, and releases held input when permission is lost. Its Settings button opens that pane; the application never changes permission itself. Modern macOS can also request **Local Network** access. Permit the receiver and allow incoming local-network connections if the firewall prompts. Input Monitoring and Screen Recording are not required by this implementation.
 
+Allow **Bluetooth** when macOS requests it. The receiver advertises a Bluetooth Low Energy service while it runs; its window shows Wi-Fi and Bluetooth availability independently. Bluetooth can remain available when the Wi-Fi listener cannot start or no local Wi-Fi network is connected. The menu-bar tooltip and connected-phone row identify the active transport.
+
 ## Network and security
 
 - Defaults to TCP 9876; override with `REMOTE_MAC_PORT=9877 npm run receiver`.
@@ -25,10 +27,26 @@ Enable **Remote Mac Control** in **System Settings → Privacy & Security → Ac
 - Accepts only private IPv4, IPv6 ULA/link-local, and loopback peers. It never creates router forwarding rules. The source filter also permits private-address VPN peers, so only run on networks you trust.
 - Random six-digit pairing codes expire after two minutes and rotate after successful pairing. Five failed attempts within one minute globally impose a one-minute lockout. Valid saved tokens still work while code pairing is locked.
 - Each device receives a random 256-bit bearer token. The receiver stores only its SHA-256 hash, device name, ID, and pair time in the login Keychain. Revoke a device from the receiver window to immediately disconnect it and invalidate its token.
-- Only one authenticated phone controls input at a time. Unauthenticated connections time out after 30 seconds; authenticated clients must send input or ping at least every 20 seconds.
+- Only one authenticated phone controls input at a time, across Wi-Fi and Bluetooth combined. Both use the same pairing credentials, revocation, Accessibility checks, protocol validation and native input handler. Unauthenticated connections time out after 30 seconds; authenticated clients must send input or ping at least every 20 seconds.
 - Every client frame has a strictly increasing sequence, is at most 16 KiB, and passes strict field/value validation. More than 300 messages per second closes the session. At most eight transport connections are accepted.
 - Browser WebSocket origins are rejected by default. For deliberate browser development only, launch with an exact allowlist, for example `REMOTE_MAC_ALLOWED_ORIGINS=http://localhost:8081 npm run receiver`. Do not use `*`; it is not interpreted as a wildcard.
 - Version 1 uses plaintext `ws://` on the trusted LAN. Pairing prevents unauthenticated control but does not prevent local traffic interception. Do not forward the port, use public/guest Wi-Fi, or treat this as an encrypted remote-access service. TLS belongs at the isolated Network transport boundary in a later protocol version.
+
+## Bluetooth transport
+
+The Mac is a CoreBluetooth peripheral and the native phone app is the central. This is a custom application GATT service, not a Bluetooth HID device; the Mac receiver must be running. Expo Go and a browser cannot connect to this service; build the native mobile app with its Bluetooth module.
+
+| Purpose | UUID |
+| --- | --- |
+| Service | `9D4B0001-7A8B-4E9A-AF33-6C7D8E9F0010` |
+| Phone → Mac, write with response | `9D4B0002-7A8B-4E9A-AF33-6C7D8E9F0010` |
+| Mac → phone, notify | `9D4B0003-7A8B-4E9A-AF33-6C7D8E9F0010` |
+
+Writes and notification subscriptions require OS Bluetooth link encryption. OS pairing does not authorize input: the phone must still enter the receiver's six-digit code or present its saved token. No pairing codes or tokens are included in advertisements. The existing protocol `hello` identifies the persistent Mac server ID after subscription.
+
+Both directions carry the unchanged UTF-8 JSON protocol with a four-byte unsigned big-endian length prefix (1–16,384 bytes). Each write or notification may contain part of a frame or several frames. Notification chunks respect each central's maximum update length. The receiver waits for CoreBluetooth's readiness callback when the transmit queue fills; it never drops a partial frame and resumes it later out of order. An incomplete header/body has an absolute five-second deadline. The outgoing queue is capped at 32,768 bytes and two seconds of age; overflow, timeout, invalid lengths and unsubscribe close the app session and release held input.
+
+CoreBluetooth's peripheral API does not provide a command to forcibly disconnect a central. After closing an app session the receiver rejects further writes from that subscription; the phone must unsubscribe/reconnect. Missing unsubscribe events are covered by the shared heartbeat timeout. Bluetooth tests verify framing, authorization, shared controller ownership and required characteristic encryption flags without starting a Bluetooth radio. Physical iOS/Android discovery, OS pairing prompts, radio loss and end-to-end input need device testing.
 
 ## Input semantics
 

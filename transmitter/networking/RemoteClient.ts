@@ -1,7 +1,8 @@
 import { envelope, isClientMessage, isMessage, MessageType, parseMessage, type ClientPayload } from '../../shared/protocol';
-import { endpointURL, normalizeEndpoint, type Endpoint } from './endpoint';
-import { createSocket } from './socketFactory';
-import type { ConnectionSnapshot, CredentialStore, Identity, SocketFactory, SocketLike } from './types';
+import { normalizeEndpoint, type Endpoint } from './endpoint';
+import { WiFiTransport } from './WiFiTransport';
+import type { Transport, TransportFactory, TransportTarget } from './Transport';
+import type { ConnectionSnapshot, CredentialStore, Identity, SocketFactory } from './types';
 export type { Endpoint, ConnectionSnapshot, CredentialStore } from './types';
 
 const CONNECT_TIMEOUT = 10_000;
@@ -13,7 +14,10 @@ const MAX_RETRIES = 8;
 export class RemoteClient {
   private snapshot: ConnectionSnapshot = { status: 'disconnected' };
   private listeners = new Set<() => void>();
-  private socket?: SocketLike;
+  private transport?: Transport;
+  private target?: TransportTarget;
+  private closing: Promise<void> = Promise.resolve();
+  whenDisconnected = () => this.closing;
   private identity?: Identity;
   private seq = 0;
   private generation = 0;
@@ -30,10 +34,13 @@ export class RemoteClient {
   private heartbeatTimer?: ReturnType<typeof setInterval>;
   private lastPong = 0;
   private pendingPing?: { id: string; sent: number };
-  private readonly socketFactory: SocketFactory;
+  private readonly transportFactory: TransportFactory;
 
-  constructor(private options: { credentials: CredentialStore; socketFactory?: SocketFactory; random?: () => number }) {
-    this.socketFactory = options.socketFactory ?? createSocket;
+  constructor(private options: { credentials: CredentialStore; socketFactory?: SocketFactory; transportFactory?: TransportFactory; autoReconnect?: boolean; random?: () => number }) {
+    this.transportFactory = options.transportFactory ?? (target => {
+      if (target.kind !== 'wifi') throw Error('Bluetooth is unavailable. Install a development build.');
+      return new WiFiTransport(target.endpoint, options.socketFactory);
+    });
   }
 
   getSnapshot = (): ConnectionSnapshot => this.snapshot;
@@ -51,15 +58,22 @@ export class RemoteClient {
       this.update({ status: 'error', message: error instanceof Error ? error.message : 'Invalid address.' });
       return;
     }
+    await this.connectTarget({ kind: 'wifi', endpoint: normalized });
+  }
+
+  async connectTarget(target: TransportTarget): Promise<void> {
     this.disconnect(false);
-    this.endpoint = normalized;
+    this.target = target;
+    this.endpoint = target.kind === 'wifi' ? target.endpoint : undefined;
     this.retries = 0;
     this.desired = true;
-    await this.open();
+    const gen = this.generation;
+    await this.closing;
+    if (gen === this.generation) await this.open();
   }
 
   reconnect = (): void => {
-    if (!this.endpoint) return;
+    if (!this.target) return;
     this.disconnect(false);
     this.desired = true;
     this.retries = 0;
@@ -67,21 +81,23 @@ export class RemoteClient {
   };
 
   private async open(): Promise<void> {
-    if (!this.endpoint || !this.desired || !this.active) return;
+    if (!this.target || !this.desired || !this.active) return;
     const gen = ++this.generation;
     this.authenticated = false;
     this.seq = 0;
-    this.update({ status: this.retries ? 'reconnecting' : 'connecting', endpoint: this.endpoint, message: undefined, serverId: undefined, serverName: undefined, latencyMs: undefined });
+    this.update({ status: this.retries ? 'reconnecting' : 'connecting', endpoint: this.endpoint, transport: this.target.kind, retryable: undefined, failureCode: undefined, message: undefined, serverId: undefined, serverName: undefined, latencyMs: undefined });
     try {
       this.identity = await this.options.credentials.getIdentity();
       if (gen !== this.generation || !this.desired || !this.active) return;
-      const socket = this.socketFactory(endpointURL(this.endpoint));
-      this.socket = socket;
-      this.connectTimer = setTimeout(() => this.fail('Connection timed out. Check the Mac address, Wi-Fi and receiver.', gen), CONNECT_TIMEOUT);
-      socket.onopen = () => { /* Wait for the receiver identity before authentication. */ };
-      socket.onmessage = event => { if (gen === this.generation) void this.receive(event.data, gen); };
-      socket.onerror = () => this.fail('Receiver unavailable. Check that both devices are on the same network.', gen);
-      socket.onclose = () => this.fail('Connection lost.', gen);
+      const transport = this.transportFactory(this.target);
+      this.transport = transport;
+      const timeout = this.target.kind === 'bluetooth' ? 45_000 : CONNECT_TIMEOUT;
+      this.connectTimer = setTimeout(() => this.fail(this.target?.kind === 'bluetooth' ? 'Bluetooth connection timed out. Check permissions, pairing and that the Mac is awake.' : 'Connection timed out. Check the Mac address, Wi-Fi and receiver.', gen), timeout);
+      transport.onMessage = raw => { if (gen === this.generation) void this.receive(raw, gen); };
+      transport.onConnectionStateChange = (state, message) => {
+        if (state !== 'connected') this.fail(message ?? 'Connection lost.', gen);
+      };
+      transport.connect();
     } catch {
       this.fail('Could not initialize the connection or secure device credentials.', gen);
     }
@@ -93,8 +109,9 @@ export class RemoteClient {
     try {
       switch (message.type) {
         case MessageType.connection: {
-          if (message.state === 'busy') { this.fail('This Mac is being controlled by another device.', gen, false); return; }
+          if (message.state === 'busy') { this.fail('This Mac is being controlled by another device. Waiting for it to release control.', gen, this.options.autoReconnect === false, 'receiver_busy'); return; }
           if (message.state === 'hello') {
+            if (this.target?.expectedServerId && message.serverId !== this.target.expectedServerId) { this.fail('Receiver identity does not match the saved Mac. Select and pair the correct receiver.', gen, false); return; }
             if (this.snapshot.serverId) { this.fail('Unexpected receiver greeting.', gen, false); return; }
             this.receiverPermission = message.permission;
             this.update({ serverId: message.serverId, serverName: message.name, status: this.retries ? 'reconnecting' : 'connecting', message: 'Checking saved pairing…' });
@@ -178,16 +195,16 @@ export class RemoteClient {
   };
 
   private write(payload: ClientPayload): boolean {
-    const socket = this.socket;
-    if (!socket || socket.readyState !== 1) return false;
-    if (socket.bufferedAmount > MAX_BUFFERED_BYTES) {
+    const transport = this.transport;
+    if (!transport || !transport.connected) return false;
+    if (transport.bufferedAmount > MAX_BUFFERED_BYTES) {
       // Never queue delayed button releases or replay stale movement after congestion.
       this.fail('Network is too slow for safe input. Reconnecting…', this.generation);
       return false;
     }
     const message = envelope(payload, ++this.seq);
     if (!isMessage(message)) return false;
-    try { socket.send(JSON.stringify(message)); return true; }
+    try { transport.send(JSON.stringify(message)); return true; }
     catch { this.fail('Connection lost while sending input.', this.generation); return false; }
   }
 
@@ -205,11 +222,11 @@ export class RemoteClient {
     }, HEARTBEAT_INTERVAL);
   }
 
-  private fail(message: string, gen: number, retry = true) {
+  private fail(message: string, gen: number, retry = true, failureCode?: string) {
     if (gen !== this.generation) return;
     this.closeSocket();
-    const shouldRetry = retry && this.desired && this.active && this.retries < MAX_RETRIES;
-    this.update({ status: shouldRetry ? 'reconnecting' : 'error', message });
+    const shouldRetry = retry && this.options.autoReconnect !== false && this.desired && this.active && this.retries < MAX_RETRIES;
+    this.update({ status: shouldRetry ? 'reconnecting' : 'error', message, retryable: retry, failureCode });
     if (!shouldRetry) { this.desired = false; return; }
     const delay = Math.min(15_000, 500 * 2 ** this.retries++) * (0.8 + (this.options.random?.() ?? Math.random()) * 0.4);
     this.retryTimer = setTimeout(() => void this.open(), delay);
@@ -224,11 +241,14 @@ export class RemoteClient {
     this.pendingPing = undefined;
     this.authenticated = false;
     this.authenticationPending = false;
-    const socket = this.socket;
-    this.socket = undefined;
-    if (socket) {
-      socket.onopen = socket.onclose = socket.onerror = socket.onmessage = null;
-      try { socket.close(1000, 'Controller disconnected'); } catch { /* Already closed. */ }
+    const transport = this.transport;
+    this.transport = undefined;
+    if (transport) {
+      transport.onMessage = transport.onConnectionStateChange = undefined;
+      try {
+        const close = transport.disconnect();
+        this.closing = Promise.all([this.closing, close]).then(() => {}, () => {});
+      } catch { /* A failed platform shutdown must not crash the input UI. */ }
     }
   }
 

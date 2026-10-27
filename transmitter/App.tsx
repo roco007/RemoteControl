@@ -9,10 +9,11 @@ import { Trackpad } from './components/Trackpad';
 import { RemoteKeyboard } from './components/RemoteKeyboard';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { theme as t } from './components/theme';
-import { RemoteClient } from './networking/RemoteClient';
+import { ConnectionManager } from './networking/ConnectionManager';
+import { bleBridge } from './modules/bluetooth-transport';
 import type { ConnectionSnapshot } from './networking/types';
 import { credentials } from './services/credentials';
-import { defaultSettings, loadSettings, saveSettings, type Settings } from './services/settings';
+import { connectionConfiguration, defaultSettings, loadSettings, saveSettings, type Settings } from './services/settings';
 import { InputEngine } from './services/InputEngine';
 import { KeyboardController } from './services/KeyboardController';
 import { GestureInterpreter } from './gestures/GestureInterpreter';
@@ -33,7 +34,11 @@ function Controller() {
   const haptic = useCallback(() => {
     if (settingsRef.current.haptics && Platform.OS !== 'web') void Haptics.selectionAsync().catch(() => {});
   }, []);
-  const client = useMemo(() => new RemoteClient({ credentials }), []);
+  const client = useMemo(() => new ConnectionManager({ credentials, bluetooth: bleBridge, onBluetoothPaired: peer => {
+    const next = { ...settingsRef.current, bluetooth: peer };
+    settingsRef.current = next; setSettings(next);
+    void saveSettings(next).catch(() => setStorageError('Bluetooth selection could not be saved.'));
+  } }), []);
   const input = useMemo(() => new InputEngine(payload => client.send(payload)), [client]);
   const keyboard = useMemo(() => new KeyboardController(payload => input.send(payload)), [input]);
   const interpreter = useMemo(() => new GestureInterpreter(input, () => settingsRef.current, haptic), [input, haptic]);
@@ -42,7 +47,7 @@ function Controller() {
   useEffect(() => client.subscribe(() => setConnection(client.getSnapshot())), [client]);
   useEffect(() => {
     let alive = true;
-    void loadSettings().then(saved => { if (alive) { setSettings(saved); if (saved.host) void client.connect({ host: saved.host, port: saved.port }); } });
+    void loadSettings().then(saved => { if (alive) { settingsRef.current = saved; setSettings(saved); client.configure(connectionConfiguration(saved)); if (saved.host || saved.bluetooth) void client.connect(); } });
     return () => { alive = false; };
   }, [client]);
   useEffect(() => {
@@ -50,15 +55,22 @@ function Controller() {
     if (connection.status === 'authentication_required' || connection.status === 'permission_required') setShowSettings(true);
   }, [connected, connection.status, input, keyboard, interpreter]);
   useEffect(() => {
+    const setActive = (active: boolean) => {
+      if (!active) { input.clear(); keyboard.reset(); interpreter.reset(); }
+      client.setActive(active);
+    };
+    // Native lifecycle distinguishes real backgrounding from system pairing dialogs.
+    // RN Android's background event also fires on Activity.onPause during a dialog.
+    const nativeLifecycle = bleBridge?.addListener('onAppState', event => setActive(event.active));
     const subscription = AppState.addEventListener('change', state => {
-      if (state !== 'active') { keyboard.reset(); interpreter.reset(); }
-      client.setActive(state === 'active');
+      if (state !== 'active') { input.clear(); keyboard.reset(); interpreter.reset(); }
+      if (!bleBridge && state !== 'inactive') setActive(state === 'active');
     });
     const onBlur = () => { keyboard.reset(); interpreter.reset(); };
     if (Platform.OS === 'web') globalThis.addEventListener?.('blur', onBlur);
-    return () => { subscription.remove(); if (Platform.OS === 'web') globalThis.removeEventListener?.('blur', onBlur); keyboard.reset(); input.dispose(); client.disconnect(); };
+    return () => { subscription.remove(); nativeLifecycle?.remove(); if (Platform.OS === 'web') globalThis.removeEventListener?.('blur', onBlur); keyboard.reset(); input.dispose(); client.disconnect(); };
   }, [client, input, keyboard, interpreter]);
-  const changeSettings = (next: Settings) => { setSettings(next); void saveSettings(next).catch(() => setStorageError('Settings could not be saved on this device.')); };
+  const changeSettings = (next: Settings) => { settingsRef.current = next; setSettings(next); client.configure(connectionConfiguration(next)); void saveSettings(next).catch(() => setStorageError('Settings could not be saved on this device.')); };
   const openSettings = () => { keyboard.reset(); interpreter.reset(); setShowSettings(true); };
   const changeMode = (next: 'mouse' | 'keyboard') => { keyboard.reset(); interpreter.reset(); setMode(next); haptic(); };
 
@@ -71,7 +83,7 @@ function Controller() {
       </View>
       <View style={[s.statusRow, compact && { marginBottom: 10 }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Connection: ${labels[connection.status]}`} onPress={openSettings} style={s.statusChip}><View style={[s.statusDot, { backgroundColor: connected ? t.accent : connection.status === 'disconnected' ? t.dim : t.warning }]} /><Text style={[s.statusLabel, connected && { color: t.accent }]}>{connected ? connection.serverName || 'Connected' : labels[connection.status]}</Text><Text style={s.chevron}>⌄</Text></Pressable>
-        <Text style={s.latency}>{connected && connection.latencyMs !== undefined ? `${connection.latencyMs} ms  /  LOCAL` : 'WIFI / LOCAL CONTROL'}</Text>
+        <Text style={s.latency}>{connected && connection.latencyMs !== undefined ? `${connection.latencyMs} ms / ${connection.transport === 'bluetooth' ? 'BLUETOOTH' : 'WI-FI'}` : connected ? `Connected via ${connection.transport === 'bluetooth' ? 'Bluetooth' : 'Wi-Fi'}` : 'LOCAL CONTROL'}</Text>
       </View>
       {storageError !== '' && <Pressable onPress={() => setStorageError('')}><Text style={s.error}>{storageError}</Text></Pressable>}
       {(connection.status === 'error' || connection.status === 'reconnecting') && <Pressable accessibilityRole="button" onPress={openSettings} style={s.errorBanner}><Text style={s.error}>{connection.message || 'Connection lost. Tap to reconnect.'}</Text></Pressable>}

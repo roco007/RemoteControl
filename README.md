@@ -2,6 +2,8 @@
 
 A phone touchpad and keyboard for your Mac, over the same local network. The repository contains two applications: an Expo transmitter for iPhone/Android and an independent native Swift receiver for macOS. The receiver posts real system mouse and keyboard events.
 
+Bluetooth backup is available in rebuilt native phone apps. See the [Bluetooth setup, architecture and device verification guide](docs/BLUETOOTH.md).
+
 The implementation, native receiver bundle, automated tests, and browser UI are available. An Android phone running Expo Go has paired and connected to the Mac over Wi-Fi; receiver handshakes also passed through Android USB forwarding. A standalone phone build, native discovery and physical multitouch verification are still required. See [verification evidence and boundaries](docs/VERIFICATION.md).
 
 ## Quick start
