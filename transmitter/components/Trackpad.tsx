@@ -21,7 +21,7 @@ export function Trackpad({ interpreter, input, keyboard, connected, onConnect, c
   const button = (name: string, which: Button, mark: string) => <InputPressable enabled={connected} accessibilityRole="button" accessibilityLabel={`${name}, hold to drag`}
     onDown={() => { input.send({ type: MessageType.mouse_down, button: which }); }}
     onUp={() => { input.send({ type: MessageType.mouse_up, button: which }); }}
-    style={({ pressed }) => [s.mouseButton, pressed && s.activeButton]}>
+    style={({ pressed }) => [s.mouseButton, compact && { height: 52 }, pressed && s.activeButton]}>
     <View style={s.buttonMain}><Text style={s.buttonMark}>{mark}</Text><Text style={s.buttonLabel}>{name}</Text></View><Text style={s.buttonHint}>HOLD TO DRAG</Text>
   </InputPressable>;
   return <View style={s.container}>
@@ -30,9 +30,9 @@ export function Trackpad({ interpreter, input, keyboard, connected, onConnect, c
         <View collapsable={false} style={s.touchSurface} testID="touchpad">
         <View pointerEvents="none" style={s.padTop}><View style={s.miniLabel}><View style={[s.dot, !connected && { backgroundColor: t.dim }]} /><Text style={s.eyebrow}>TOUCH SURFACE</Text></View><Text style={s.padCorner}>01 / MOUSE</Text></View>
         <View pointerEvents="none" style={s.dots}>{Array.from({ length: 81 }, (_, i) => <View key={i} style={s.gridDot} />)}</View>
-        <View pointerEvents="none" style={[s.center, compact && s.compactCenter]}>
+        <View pointerEvents={!connected && compact ? 'box-none' : 'none'} style={[s.center, compact && s.compactCenter]}>
           {!compact && <View style={s.cursorRing}><Text style={s.cursor}>↖</Text></View>}
-          <Text style={[s.padTitle, compact && { fontSize: 16 }]}>{connected ? 'Make your move.' : 'Your Mac, within reach.'}</Text>
+          {!connected && compact ? <Pressable accessibilityRole="button" accessibilityLabel="Connect to a Mac" onPress={onConnect} style={s.inlineConnect}><Text style={s.connectText}>Connect to a Mac ↗</Text></Pressable> : <Text style={[s.padTitle, compact && { fontSize: 16 }]}>{connected ? 'Make your move.' : 'Your Mac, within reach.'}</Text>}
           {!compact && <Text style={s.padDescription}>{connected ? 'A little space. Complete control.' : 'Connect your Mac to get started.'}</Text>}
         </View>
         </View>
@@ -50,12 +50,13 @@ export function Trackpad({ interpreter, input, keyboard, connected, onConnect, c
         </View>
       </View>
     </View>
-    {!connected && <Pressable accessibilityRole="button" accessibilityLabel="Connect to a Mac" onPress={onConnect} style={s.connectOverlay}><Text style={s.connectText}>Connect to a Mac <Text style={{ fontSize: 17 }}>↗</Text></Text></Pressable>}
+    {!connected && !compact && <Pressable accessibilityRole="button" accessibilityLabel="Connect to a Mac" onPress={onConnect} style={s.connectOverlay}><Text style={s.connectText}>Connect to a Mac <Text style={{ fontSize: 17 }}>↗</Text></Text></Pressable>}
     <View style={s.buttons}>{button('Left click', 'left', '↖')}<Pressable disabled={!connected} accessibilityRole="button" accessibilityLabel="Double click" onPress={() => input.send({ type: MessageType.mouse_click, button: 'left', count: 2 })} style={({ pressed }) => [s.doubleButton, pressed && s.activeButton]}><Text style={s.doubleText}>×2</Text></Pressable>{button('Right click', 'right', '↗')}</View>
     {!compact && <Text style={s.footerHint}>Arrow buttons: desktops & overview · Pinch to zoom</Text>}
   </View>;
 }
 const s = StyleSheet.create({
+  inlineConnect: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: t.accent },
   container: { flex: 1, gap: 12, minHeight: 160 }, pad: { flex: 1, minHeight: 140, borderRadius: 25, borderWidth: 1, borderColor: t.border, backgroundColor: t.surface, overflow: 'hidden' },
   touchSurface: { flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   padTop: { position: 'absolute', top: 21, left: 21, right: 21, flexDirection: 'row', justifyContent: 'space-between' }, miniLabel: { flexDirection: 'row', alignItems: 'center', gap: 7 }, dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: t.accent }, eyebrow: { color: t.muted, fontSize: 9, letterSpacing: 1.6, fontFamily: t.mono }, padCorner: { color: t.dim, fontSize: 9, fontFamily: t.mono },

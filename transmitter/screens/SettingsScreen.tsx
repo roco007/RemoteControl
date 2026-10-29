@@ -11,8 +11,8 @@ import { ActionButton, SettingStepper } from '../components/Controls';
 import { theme as t } from '../components/theme';
 import { PROTOCOL } from '../../shared/protocol';
 
-export function SettingsScreen({ visible, onClose, settings, onSettings, client, connection }: {
-  visible: boolean; onClose: () => void; settings: Settings; onSettings: (s: Settings) => void; client: ConnectionManager; connection: ConnectionSnapshot;
+export function SettingsScreen({ visible, onClose, settings, onSettings, client, connection, onDisconnect }: {
+  visible: boolean; onClose: () => void; settings: Settings; onSettings: (s: Settings) => void; client: ConnectionManager; connection: ConnectionSnapshot; onDisconnect: () => void;
 }) {
   const [host, setHost] = useState(settings.host);
   const [port, setPort] = useState(String(settings.port));
@@ -54,19 +54,19 @@ export function SettingsScreen({ visible, onClose, settings, onSettings, client,
         <View style={s.section}><Text style={s.sectionTitle}>WI-FI · MANUAL CONNECTION</Text><View style={s.fieldRow}><View style={{ flex: 1, gap: 7 }}><Text style={s.fieldLabel}>IP ADDRESS OR HOSTNAME</Text><TextInput accessibilityLabel="Mac hostname or IP address" placeholder="192.168.0.105" placeholderTextColor={t.dim} value={host} onChangeText={setHost} autoCapitalize="none" autoCorrect={false} style={s.field} returnKeyType="next" /></View><View style={{ width: 82, gap: 7 }}><Text style={s.fieldLabel}>PORT</Text><TextInput accessibilityLabel="Receiver port" placeholder={String(PROTOCOL.defaultPort)} placeholderTextColor={t.dim} keyboardType="number-pad" value={port} onChangeText={setPort} style={s.field} maxLength={5} /></View></View>
           {!!localError && <Text style={s.error}>{localError}</Text>}<ActionButton primary title={busy ? 'Connecting…' : 'Connect to Mac ↗'} disabled={busy || !host.trim()} onPress={() => connect()} />
           <Text style={s.footnote}>Find the address in the receiver window on your Mac.</Text>
-          {!!settings.host && <Pressable accessibilityRole="button" onPress={() => { client.disconnect(); setHost(''); setPort(String(PROTOCOL.defaultPort)); onSettings({ ...settings, host: '', port: PROTOCOL.defaultPort }); }}><Text style={s.link}>Clear saved address</Text></Pressable>}
+          {!!settings.host && <Pressable accessibilityRole="button" onPress={() => { onDisconnect(); setHost(''); setPort(String(PROTOCOL.defaultPort)); onSettings({ ...settings, host: '', port: PROTOCOL.defaultPort, shakeActions: false }); }}><Text style={s.link}>Clear saved address</Text></Pressable>}
         </View>
         {(connection.status === 'authentication_required' || connection.status === 'permission_required' || ready) && <View style={s.pairing}>
           <Text style={s.sectionTitle}>{ready ? 'PAIRED & CONNECTED' : connection.status === 'permission_required' ? 'ACCESSIBILITY REQUIRED' : 'PAIR THIS PHONE'}</Text>
           {connection.status === 'authentication_required' ? <><Text style={s.description}>Enter the six-digit code shown on your Mac. Only pair with a Mac you recognize.</Text><View style={s.fieldRow}><TextInput accessibilityLabel="Six digit pairing code" style={[s.field, s.code]} value={code} onChangeText={v => setCode(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" maxLength={6} placeholder="000000" placeholderTextColor={t.dim} secureTextEntry={false} /><ActionButton primary title="Pair phone" disabled={code.length !== 6} onPress={() => { client.pair(code); setCode(''); }} /></View></> : connection.status === 'permission_required' ? <Text style={s.description}>On your Mac, open System Settings → Privacy & Security → Accessibility, and enable Remote Mac Control. The receiver checks permission automatically.</Text> : <Text style={s.description}>Your phone can control the Mac. Revoke access at any time in the receiver window.</Text>}
           {ready && <ActionButton primary title="Start controlling ↗" onPress={onClose} />}
         </View>}
-        <View style={s.actionRow}><ActionButton title="Reconnect" onPress={() => client.reconnect()} disabled={!settings.host && !settings.bluetooth} style={{ flex: 1 }} /><ActionButton title="Disconnect" onPress={() => client.disconnect()} disabled={connection.status === 'disconnected'} style={{ flex: 1 }} /></View>
-        {connection.serverId && <Pressable accessibilityRole="button" onPress={() => { const id = connection.serverId; client.disconnect(); if (id) void credentials.removeToken(id).catch(() => setLocalError('Could not remove this saved pairing.')); }}><Text style={s.forget}>Forget pairing on this phone</Text></Pressable>}
+        <View style={s.actionRow}><ActionButton title="Reconnect" onPress={() => client.reconnect()} disabled={!settings.host && !settings.bluetooth} style={{ flex: 1 }} /><ActionButton title="Disconnect" onPress={onDisconnect} disabled={connection.status === 'disconnected'} style={{ flex: 1 }} /></View>
+        {connection.serverId && <Pressable accessibilityRole="button" onPress={() => { const id = connection.serverId; onDisconnect(); if (id) void credentials.removeToken(id).catch(() => setLocalError('Could not remove this saved pairing.')); }}><Text style={s.forget}>Forget pairing on this phone</Text></Pressable>}
         <View style={s.divider} /><View style={s.section}><Text style={s.sectionTitle}>MOUSE & TRACKPAD</Text><SettingStepper title="Pointer sensitivity" detail="Fine movements to fast sweeps" value={settings.pointerSensitivity} onChange={v => onSettings({ ...settings, pointerSensitivity: v })} /><SettingStepper title="Scroll sensitivity" detail="Horizontal and vertical scrolling" value={settings.scrollSensitivity} onChange={v => onSettings({ ...settings, scrollSensitivity: v })} />{toggle('naturalScroll', 'Natural scrolling', 'Content follows your fingers')}{toggle('tapToClick', 'Tap to click', 'One finger for a left click')}{toggle('twoFingerRightClick', 'Two-finger right click', 'Tap with two fingers for the context menu')}</View>
         <View style={s.section}><Text style={s.sectionTitle}>FEEDBACK</Text>{toggle('haptics', 'Haptic feedback', 'A subtle response to keys and clicks')}</View>
         <View style={s.note}><Text style={s.noteTitle}>A few native details</Text><Text style={s.noteText}>Use the arrow buttons for desktops and macOS overview. Two fingers scroll horizontally or vertically. Pinch with two fingers to zoom. Enable the corresponding navigation shortcuts in macOS.</Text><Text style={s.noteText}>Use trusted Wi-Fi. Local WebSocket traffic in this version is not encrypted. There is no cloud relay.</Text></View>
-        <Text style={s.version}>REMOTE MAC / VERSION 1.0 / LOCAL BY DESIGN</Text>
+        <Text style={s.version}>REMOTE MAC / VERSION 1.0.21 / LOCAL BY DESIGN</Text>
       </ScrollView>
     </View></SafeAreaView>
   </Modal>;

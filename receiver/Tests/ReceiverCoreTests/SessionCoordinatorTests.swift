@@ -9,6 +9,17 @@ final class SessionCoordinatorTests {
                                    name: "Test Mac", permission: { true }, log: { _ in })
     }
 
+    @Test(arguments: [ReceiverTransport.wifi, ReceiverTransport.bluetooth])
+    func testBothTransportsDispatchFineAdjustmentsThroughTheSameSession(_ transport: ReceiverTransport) throws {
+        let sink = RecordingSink(), pairing = try PairingManager(store: MemoryTrustStore())
+        let coordinator = makeCoordinator(sink, pairing: pairing)
+        let session = try unwrap(coordinator.makeSession(transport: transport, send: { _ in }, cancel: {}))
+        session.receive(WireProtocol.encode(.authentication, seq: 1, fields: ["deviceId": deviceID, "deviceName": "Phone", "code": pairing.code]))
+        session.receive(WireProtocol.encode(.systemAdjust, seq: 2, fields: ["control": "volume", "steps": -3]))
+        session.receive(WireProtocol.encode(.systemAdjust, seq: 3, fields: ["control": "brightness", "steps": 2]))
+        expectEqual(sink.actions, [.systemAdjust(.volume, steps: -3), .systemAdjust(.brightness, steps: 2)])
+    }
+
     @Test func testWiFiAndBluetoothShareControllerOwnershipAndTrust() throws {
         let sink = RecordingSink(), pairing = try PairingManager(store: MemoryTrustStore())
         let coordinator = makeCoordinator(sink, pairing: pairing)

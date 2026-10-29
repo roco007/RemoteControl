@@ -57,3 +57,93 @@ describe('remote keyboard lifecycle', () => {
     expect(keyboard.getModifiers()).toEqual(['shift', 'option']); keyboard.reset();
   });
 });
+
+describe('alternate character activations', () => {
+  function setup() {
+    const sent: ClientPayload[] = [];
+    const keyboard = new KeyboardController(payload => { sent.push(payload); return true; });
+    return { keyboard, sent };
+  }
+
+  it('defers a character until a valid tap and sends the base key once', () => {
+    const { keyboard, sent } = setup();
+    const press = keyboard.characterPress('1');
+    expect(sent).toEqual([]);
+    press.tap(); press.tap();
+    expect(sent).toEqual([
+      { type: 'keyboard_down', key: '1', modifiers: [], repeat: false },
+      { type: 'keyboard_up', key: '1', modifiers: [] },
+    ]);
+  });
+
+  it('sends only the shifted character once when a long press wins', () => {
+    vi.useFakeTimers();
+    const { keyboard, sent } = setup();
+    const press = keyboard.characterPress('1');
+    press.alternate(); press.tap(); press.alternate();
+    vi.advanceTimersByTime(2000);
+    expect(sent).toEqual([
+      { type: 'keyboard_down', key: '1', modifiers: ['shift'], repeat: false },
+      { type: 'keyboard_up', key: '1', modifiers: [] },
+    ]);
+  });
+
+  it('preserves sticky modifiers without leaving a temporary shift held', () => {
+    const { keyboard, sent } = setup();
+    keyboard.toggleModifier('command'); sent.length = 0;
+    keyboard.characterPress('a').alternate();
+    expect(sent).toEqual([
+      { type: 'keyboard_down', key: 'a', modifiers: ['command', 'shift'], repeat: false },
+      { type: 'keyboard_up', key: 'a', modifiers: ['command'] },
+    ]);
+    expect(keyboard.getModifiers()).toEqual(['command']);
+    keyboard.toggleModifier('shift'); sent.length = 0;
+    keyboard.characterPress('slash').alternate();
+    expect(sent).toEqual([
+      { type: 'keyboard_down', key: 'slash', modifiers: ['command', 'shift'], repeat: false },
+      { type: 'keyboard_up', key: 'slash', modifiers: ['command', 'shift'] },
+    ]);
+    expect(keyboard.getModifiers()).toEqual(['command', 'shift']);
+    keyboard.reset();
+  });
+
+  it('selects uppercase letters with Caps Lock while retaining the sticky Shift selection', () => {
+    const { keyboard, sent } = setup();
+    keyboard.press('caps_lock'); keyboard.release('caps_lock'); keyboard.toggleModifier('shift'); sent.length = 0;
+    keyboard.characterPress('q').alternate();
+    keyboard.characterPress('1').alternate();
+    expect(sent).toEqual([
+      { type: 'keyboard_down', key: 'q', modifiers: [], repeat: false },
+      { type: 'keyboard_up', key: 'q', modifiers: ['shift'] },
+      { type: 'keyboard_down', key: '1', modifiers: ['shift'], repeat: false },
+      { type: 'keyboard_up', key: '1', modifiers: ['shift'] },
+    ]);
+    expect(keyboard.getModifiers()).toEqual(['shift']);
+    keyboard.reset();
+  });
+
+  it('never types after a canceled or reset press, but permits the next new press', () => {
+    const { keyboard, sent } = setup();
+    const canceled = keyboard.characterPress('1');
+    canceled.cancel(); canceled.tap(); canceled.alternate();
+    expect(sent).toEqual([]);
+    const stale = keyboard.characterPress('2');
+    keyboard.reset(); sent.length = 0;
+    stale.tap(); stale.alternate();
+    expect(sent).toEqual([]);
+    keyboard.characterPress('3').tap();
+    expect(sent).toEqual([
+      { type: 'keyboard_down', key: '3', modifiers: [], repeat: false },
+      { type: 'keyboard_up', key: '3', modifiers: [] },
+    ]);
+  });
+
+  it('keeps a rejected press consumed and never retries it after reconnect', () => {
+    const sent: ClientPayload[] = [];
+    let connected = false;
+    const keyboard = new KeyboardController(payload => { sent.push(payload); return connected; });
+    const press = keyboard.characterPress('1');
+    press.alternate(); connected = true; press.tap(); press.alternate();
+    expect(sent).toEqual([{ type: 'keyboard_down', key: '1', modifiers: ['shift'], repeat: false }]);
+  });
+});

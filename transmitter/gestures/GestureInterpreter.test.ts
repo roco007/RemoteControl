@@ -1,9 +1,10 @@
+import { defaultGestureMappings, defaultGestureOrders } from '../services/gestureSettings';
 import type { ClientPayload } from '../../shared/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import { GestureInterpreter } from './GestureInterpreter';
 import type { Settings } from '../services/settings';
 
-const settings: Settings = { pointerSensitivity: 1.2, scrollSensitivity: 1, naturalScroll: true, tapToClick: true, twoFingerRightClick: true, haptics: true, host: '', port: 9876, transportMode: 'automatic' };
+const settings: Settings = { pointerSensitivity: 1.2, scrollSensitivity: 1, naturalScroll: true, tapToClick: true, twoFingerRightClick: true, haptics: true, shakeActions: true, backgroundGestures: true, gestureMode: 'directional', gestureMappings: defaultGestureMappings, gestureOrders: defaultGestureOrders, host: '', port: 9876, transportMode: 'automatic' };
 function setup(overrides: Partial<Settings> = {}) {
   const input = { send: vi.fn((_payload: ClientPayload) => true), move: vi.fn(), scroll: vi.fn(), clear: vi.fn(), releaseAll: vi.fn() };
   return { input, gesture: new GestureInterpreter(input, () => ({ ...settings, ...overrides })) };

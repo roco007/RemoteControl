@@ -4,7 +4,46 @@ A phone touchpad and keyboard for your Mac, over the same local network. The rep
 
 Bluetooth backup is available in rebuilt native phone apps. See the [Bluetooth setup, architecture and device verification guide](docs/BLUETOOTH.md).
 
-The implementation, native receiver bundle, automated tests, and browser UI are available. An Android phone running Expo Go has paired and connected to the Mac over Wi-Fi; receiver handshakes also passed through Android USB forwarding. A standalone phone build, native discovery and physical multitouch verification are still required. See [verification evidence and boundaries](docs/VERIFICATION.md).
+### Sound & Light
+
+Open the fourth bottom tab, **Sound & Light**, and tap the centre circle to switch between **Sound** (Mac output volume) and **Light** (Mac display brightness). Draw around the button with one finger: clockwise increases the selected control, anticlockwise decreases it. Changes follow the arc continuously; partial circles work, and additional turns continue adjusting. The screen shows the amount of rotation, not a measured Mac level.
+
+One full turn sends 64 fine media-key increments (Option-Shift), approximately the range of the native control. Lifting your finger, adding another finger, switching modes, leaving the screen, or losing the connection cancels the current stroke. Both Wi-Fi and Bluetooth use the same command. Rebuild/update the Mac receiver and phone app; older receivers show an update prompt. Brightness follows macOS brightness-key support, so external monitors may need their own controls. Fixed-volume audio outputs may not respond to Mac volume keys.
+
+### Shake-to-Action
+
+On Android, choose **Calibrate gestures** in the Gestures tab or its Configure sheet. Select one label or all seven, then record **5 takes per label**. Every completed recording with sensor data is kept as performed; calibration does not judge whether the movement was correct. Tap Record when ready for each take and Save after the selected set is complete. During use, a movement resembling **any one** saved example can trigger that label’s action. The gesture illustrations are optional examples, and you can teach your own motion. Earlier calibration remains saved until you save new takes. If you leave the app, **Continue calibration** resumes with completed takes retained while the app process remains alive. Calibration works without a Mac connection and pauses gesture actions while you practice. **Recalibrate** is available at any time; canceling keeps previous training. Saved patterns stay on the phone and apply in foreground and background, including the home-screen widget. See [gesture learning](docs/GESTURE_LEARNING.md) for recognition and verification details.
+
+Easy movements to try are a gentle tilt left and return, tilt right and return, move the upright phone a short distance up and return, or move it down and return. Choose a distinct, comfortable motion for each shortcut and repeat that same motion for its five takes. These are optional examples: existing ten-take training stays usable until you choose to replace it.
+
+Motion recognition uses only X (left/right) and Y (up/down), with the phone held upright and its screen facing you. Z (toward/away) is ignored for detecting, matching, and settling a gesture. Saved recordings are adapted automatically without requiring another five takes. Calibration also lets you inspect recorded takes: choose a movement and take to see the X/Y graph, numeric readings, and movement measurements. New saved takes retain the original accelerometer samples in g, including gravity and the preparation period. Older training without raw readings is adapted from its normalized 32-point matching shape; original readings cannot be recovered. Original XYZ readings remain available in the JSON export, but depth is not used for recognition. You can share the selected movement's data for analysis. Viewing readings does not change recognition rules: compare several takes and ordinary non-gesture motion before choosing a new formula.
+
+On Android, add the **Remote Mac Gestures** home-screen widget from **Gestures → Configure → Add home-screen widget**. Tap the widget to switch motion gestures on or off without opening the app. Its ON/OFF label shows your saved choice, while the smaller status shows whether it is listening or still connecting. The app switch, widget, and notification Stop action stay in sync. Enabling from the home screen uses background gestures and your saved Wi-Fi pairing; open and pair the app first if the widget asks for setup. Turning gestures off preserves your mappings and saved connection so the widget can turn them back on.
+
+Open the **Gestures** tab beside **Mouse**, **Keyboard**, and **Sound & Light** for Shake-to-Action, its saved master switch, recorded shake count and **Configure** sheet. Mouse and Keyboard use the full control area; enabled motion shortcuts continue listening across all four tabs. Choose **Directional** or **Shake count**, then tap any gesture to assign Screenshot, Lock/Unlock Mac, Kill current app, Photo Booth, or Disabled. Drag the grip beside a gesture under **Card order** to arrange the cards from left to right, then top to bottom. Directional and Shake count remember their own orders across app restarts; **Reset order** restores the current mode's default layout. Moving a card keeps its gesture and assigned action together. The two modes do not run simultaneously.
+
+| Directional gesture | Default Mac action |
+| --- | --- |
+| Right | Screenshot |
+| Left | Lock/Unlock Mac |
+| Left → Straight | Kill current app |
+| Right → Straight | Open Photo Booth |
+
+For default gestures and earlier calibration, hold the phone upright in portrait, screen facing you. **Left** and **Right** use a single sideways flick. For **Left → Straight** or **Right → Straight**, tilt the top of the phone to that side, pause briefly, then return it upright to its starting angle. The action runs after the return; simply holding the phone tilted does not complete the gesture. You can retrain either label separately with five takes of your own motion; saved examples define its recognition. Existing action assignments and card order carry over from the previous Left → Right and Right → Left gestures. The new tilt movements start with default tuning and can be calibrated individually; saved single-flick and shake calibration is retained.
+
+**Shake count** retains the original mappings: one screenshot, two kill current app, three Lock/Unlock Mac. Distinct back-and-forth shakes with short pauses are grouped, then single/double actions resolve after a 1.1-second settling window. A cooldown prevents repeated actions. The **Shakes** badge and last gesture remain visible beside listening status.
+
+Motion shortcuts run **one action at a time**. Recognition pauses as soon as a mapped action starts and resumes after the Mac confirms completion or failure. Movements during that pause are discarded. If the connection drops, the app checks the same action without repeating it; an unknown outcome stays paused and offers **Resume gestures**. Both the phone and Mac receiver need the update. Screenshot completion means its shortcut was sent, not that the image file has finished saving.
+
+On the updated **Android** app, **Keep active in background** uses a native foreground service with a persistent notification and **Stop gestures** action. It continues when Home is pressed, the screen turns off, or the task is swiped away. Background Mac actions require a saved, paired Mac Wi-Fi address; phone apps and URLs can work offline; foreground controls still support Wi-Fi and Bluetooth. Android Force Stop and reboot stop listening until the app is reopened. Notification permission is requested when background mode starts. Continued sensor listening uses extra battery. Gestures pause while configuration is open, cancel across connection/lifecycle changes, and never replay after reconnection. Disconnect/Forget also disables gestures.
+
+On iPhone, shake-count mode works only while the app is open; directional/background support is Android-specific. Browser previews display configuration without listening for motion. Install both the updated receiver and native phone build; Expo Go cannot provide the background module.
+
+**Lock/Unlock Mac** checks the current Mac session: an unlocked session is locked with Control-Command-Q; a locked session first wakes an asleep display and waits for it to be ready, then receives Space, the configured Mac password, and Return, with a short pause between steps. In the **Mac receiver window**, save your Mac login password to enable unlocking; it is stored in that Mac's login Keychain and can be cleared there. For terminal launches, `MAC_UNLOCK_TEXT` overrides the saved password. The password stays on the Mac and is never sent by or entered on the phone. Existing `lock` gesture mappings, including Android background mappings, keep working without migration.
+
+Unlocking requires an already logged-in Mac session with the receiver running and Accessibility enabled; it cannot unlock FileVault before login or start the receiver after a restart. Updated gesture clients receive an action-completion result based on the observed lock state. A fully sleeping Mac must wake before its receiver can accept a command; this display-wake change does not add Wake-on-LAN. Kill current app can discard unsaved work; the receiver, Finder and system UI are excluded. Screenshot/lock shortcuts must be enabled in macOS. Photo Booth uses its installed bundle identifier. A sent command is not proof that macOS completed it.
+
+The native Android app and Mac receiver have been installed locally. Automated tests, native UI observations and remaining physical acceptance checks are recorded in [verification evidence and boundaries](docs/VERIFICATION.md).
 
 ## Quick start
 
@@ -32,6 +71,20 @@ npx expo start --go
 ```
 
 In Expo Go, open Connection & settings and enter the receiver's hostname or IP manually. Do not enter `http://`, `ws://`, a path, or credentials in the hostname field. The default port is **9876**. Enter the code from your Mac, then select **Start controlling**. Mouse and Keyboard remain one tap apart.
+
+### Update the installed Android app over USB
+
+Connect and authorize your phone, then use **Transmitter: Sync to Android via USB**
+in VS Code's **Terminal → Run Task** or **Run and Debug**. From the repository root:
+
+```sh
+python3 .vscode/sync-android-usb.py
+```
+
+This builds the current JavaScript and native code and updates Remote Mac while
+retaining its saved pairing and settings. It uses the current app version; no
+version bump is needed for each local sync. Use `--check` to check prerequisites
+without installing. See [USB sync instructions](.vscode/README.md) for options.
 
 ### Android development over USB
 
@@ -127,10 +180,11 @@ The transmitter captures intent, maintains connection state and sends protocol m
 | Two-finger tap | Right click, when enabled |
 | Pinch | Application zoom through Command-plus/minus shortcuts |
 | Three/four-finger swipe | Desktops, full-screen apps and Mission Control using macOS shortcuts |
-| Keyboard keys | Real key down/up; holding a normal key repeats after a short delay |
+| Keys with a small alternate label | Tap for the main character; hold for the alternate once (for example, hold `1` for `!`) |
+| Other keyboard keys | Real key down/up; holding Backspace, Space, arrows and other repeatable keys repeats after a short delay |
 | Modifier keys | Tap to latch Shift, Control, Option or Command; tap again to release |
 | Fn / # | Punctuation, F1–F12, Home/End, Page Up/Down and forward Delete |
-| Unicode composition | Compose on the phone and tap Send; separate from physical shortcut events |
+| Unicode composition | The Compose field stays below the scrolling keys and above the phone keyboard. Review your text, tap Send, or tap Done to dismiss the phone keyboard without clearing the draft. |
 | Release all | Clear held remote buttons/keys and sticky shortcut modifiers |
 
 The keyboard also includes arrows, Tab, Escape, Backspace, Return, Space, Caps Lock and quick Command shortcuts. Portrait and landscape layouts are supported. The Mac uses its current keyboard input source for ANSI physical key positions; use the Unicode field for layout-independent text.
@@ -286,3 +340,7 @@ Next priorities are physical-device test coverage, encrypted transport with rece
 ## Preview
 
 ![Remote Mac touchpad](docs/screenshots/transmitter.png)
+
+### Gesture action lists
+
+Each gesture can run an ordered list of Mac actions, installed phone apps, installed Mac apps, Mac shell commands, and URLs on either device. Open **Gesture controls** and expand a gesture to add, edit, remove, or reorder its actions. See [Gesture action lists](docs/GESTURE_ACTION_LISTS.md) for execution behavior, background phone-action notifications, and rebuild requirements.

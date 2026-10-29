@@ -1,0 +1,21 @@
+<resources>
+    <string name="gesture_widget_action_pending">Action in progress…</string>
+    <string name="gesture_widget_action_unknown">Action status unknown</string>
+  <string name="gesture_widget_name">Remote Mac gestures</string>
+  <string name="gesture_widget_description">Turn motion gestures on or off from your home screen.</string>
+  <string name="gesture_widget_title">Remote Mac</string>
+  <string name="gesture_widget_on">Gestures ON</string>
+  <string name="gesture_widget_off">Gestures OFF</string>
+  <string name="gesture_widget_tap_on">Tap to turn on</string>
+  <string name="gesture_widget_listening">Listening</string>
+  <string name="gesture_widget_connecting">Connecting to Mac</string>
+  <string name="gesture_widget_not_listening">Not listening</string>
+  <string name="gesture_widget_calibrating">Calibration paused</string>
+  <string name="gesture_widget_reconnect">Open app to reconnect</string>
+  <string name="gesture_widget_setup_short">Tap to set up</string>
+  <string name="gesture_widget_setup">Connect and pair your Mac over Wi-Fi to use this widget.</string>
+  <string name="gesture_widget_start_failed">Open Remote Mac to start gestures, then try the widget again.</string>
+  <string name="gesture_widget_accessibility_on">Gestures on. %1$s. Tap to turn off.</string>
+  <string name="gesture_widget_accessibility_off">Gestures off. %1$s.</string>
+  <string name="gesture_widget_accessibility_active">Executing %1$s.</string>
+</resources>

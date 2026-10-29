@@ -7,6 +7,7 @@ export const PROTOCOL = {
   "maxMessageBytes": 16384,
   "maxDelta": 1000,
   "maxTextLength": 1024,
+  "maxSystemAdjustSteps": 16,
   "messageTypes": [
     "connection",
     "authentication",
@@ -20,10 +21,16 @@ export const PROTOCOL = {
     "keyboard_down",
     "keyboard_up",
     "keyboard_text",
+    "system_action",
+    "system_action_status",
+    "system_action_result",
+    "system_adjust",
     "release_all",
     "ping",
     "pong",
-    "error"
+    "error",
+    "apps_list",
+    "apps_list_result"
   ],
   "buttons": [
     "left",
@@ -35,6 +42,19 @@ export const PROTOCOL = {
     "control",
     "option",
     "command"
+  ],
+  "systemControls": [
+    "volume",
+    "brightness"
+  ],
+  "systemActions": [
+    "screenshot",
+    "kill_app",
+    "lock",
+    "photo_booth",
+    "open_app",
+    "run_command",
+    "open_url"
   ],
   "gestures": [
     "zoom",
@@ -140,8 +160,14 @@ export const MessageType = {
   "keyboard_down": "keyboard_down",
   "keyboard_up": "keyboard_up",
   "keyboard_text": "keyboard_text",
+  "system_action": "system_action",
+  "system_action_status": "system_action_status",
+  "system_action_result": "system_action_result",
+  "system_adjust": "system_adjust",
   "release_all": "release_all",
   "ping": "ping",
   "pong": "pong",
-  "error": "error"
+  "error": "error",
+  "apps_list": "apps_list",
+  "apps_list_result": "apps_list_result"
 } as const;

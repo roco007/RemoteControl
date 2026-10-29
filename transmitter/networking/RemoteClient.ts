@@ -1,8 +1,9 @@
-import { envelope, isClientMessage, isMessage, MessageType, parseMessage, type ClientPayload } from '../../shared/protocol';
+import { envelope, isClientMessage, isMessage, MessageType, parseMessage, type ClientPayload, type SystemAction, type InstalledApplication } from '../../shared/protocol';
 import { normalizeEndpoint, type Endpoint } from './endpoint';
 import { WiFiTransport } from './WiFiTransport';
 import type { Transport, TransportFactory, TransportTarget } from './Transport';
-import type { ConnectionSnapshot, CredentialStore, Identity, SocketFactory } from './types';
+import type { ConnectionSnapshot, CredentialStore, Identity, SocketFactory, SystemActionCompletion } from './types';
+import { SystemActionDispatchError } from './types';
 export type { Endpoint, ConnectionSnapshot, CredentialStore } from './types';
 
 const CONNECT_TIMEOUT = 10_000;
@@ -10,6 +11,18 @@ const HEARTBEAT_INTERVAL = 5_000;
 const HEARTBEAT_TIMEOUT = 16_000;
 const MAX_BUFFERED_BYTES = 32_768;
 const MAX_RETRIES = 8;
+const ACTION_STATUS_INTERVAL = 2_000;
+const ACTION_CONFIRMATION_TIMEOUT = 10_000;
+export interface SystemActionParameters { appId?: string; command?: string; url?: string }
+interface PendingCatalog {
+  id: string; generation: number; cursor: number; apps: InstalledApplication[];
+  timer?: ReturnType<typeof setTimeout>;
+  promise: Promise<InstalledApplication[]>; resolve: (apps: InstalledApplication[]) => void; reject: (error: Error) => void;
+}
+interface PendingAction {
+  id: string; action: SystemAction; serverId?: string; deviceId?: string; generation: number; lastReply: number; dispatched: boolean; minimumReplySeq: number;
+  promise: Promise<SystemActionCompletion>; resolve: (result: SystemActionCompletion) => void; reject: (error: Error) => void;
+}
 
 export class RemoteClient {
   private snapshot: ConnectionSnapshot = { status: 'disconnected' };
@@ -34,6 +47,11 @@ export class RemoteClient {
   private heartbeatTimer?: ReturnType<typeof setInterval>;
   private lastPong = 0;
   private pendingPing?: { id: string; sent: number };
+  private pendingAction?: PendingAction;
+  private pendingCatalog?: PendingCatalog;
+  private nextCatalog = 0;
+  private actionTimer?: ReturnType<typeof setTimeout>;
+  private usedActionIds = new Set<string>();
   private readonly transportFactory: TransportFactory;
 
   constructor(private options: { credentials: CredentialStore; socketFactory?: SocketFactory; transportFactory?: TransportFactory; autoReconnect?: boolean; random?: () => number }) {
@@ -44,6 +62,81 @@ export class RemoteClient {
   }
 
   getSnapshot = (): ConnectionSnapshot => this.snapshot;
+  performSystemAction = (action: SystemAction, id: string, parameters: SystemActionParameters = {}): Promise<SystemActionCompletion> => {
+    const reject = (message: string) => Promise.reject(new SystemActionDispatchError('not_sent', message));
+    // Only a live original native event can promote an adopted read-only token.
+    const adopted = this.pendingAction?.id === id && this.pendingAction.action === action && !this.pendingAction.dispatched ? this.pendingAction : undefined;
+    if (this.pendingAction && !adopted) return reject('Action in progress. Gesture recognition is paused.');
+    if (this.usedActionIds.has(id) && !adopted) return reject('This gesture action was already submitted.');
+    if (!this.authenticated || !this.active || this.snapshot.status !== 'connected' || !this.transport?.connected) return reject('Connect to your Mac before using gestures.');
+    if (!this.snapshot.capabilities?.includes('system_actions') || !this.snapshot.capabilities.includes('action_completion')) return reject('Update the Mac receiver to support action completion.');
+    if ((action === 'open_app' || action === 'run_command' || action === 'open_url' || action === 'photo_booth') && !this.snapshot.capabilities.includes(action)) return reject('Update the Mac receiver to support this action.');
+    const payload = { ...parameters, type: MessageType.system_action, action, id } as Extract<ClientPayload, { type: 'system_action' }>;
+    if (!isMessage(envelope(payload, 0))) return reject('Invalid gesture action request.');
+    if (this.transport.bufferedAmount > MAX_BUFFERED_BYTES) return reject('Connection is busy. This gesture was not sent.');
+    if (adopted && ((adopted.serverId && adopted.serverId !== this.snapshot.serverId) || (adopted.deviceId && adopted.deviceId !== this.identity?.deviceId))) return reject('Reconnect to the Mac that owns this gesture action.');
+    const transport = this.transport;
+    const pending = adopted ?? this.createPendingAction(action, id, this.snapshot.serverId, this.identity?.deviceId, 'running', true);
+    pending.dispatched = true;
+    pending.generation = this.generation; pending.lastReply = Date.now();
+    pending.minimumReplySeq = this.seq + 1;
+    this.updateActionState('running', 'Action in progress…');
+    this.usedActionIds.add(id);
+    try {
+      transport.send(JSON.stringify(envelope(payload, ++this.seq)));
+      this.scheduleActionQuery();
+    } catch {
+      // A throwing transport may already have handed bytes to the platform.
+      // Keep the operation and reconcile it; never retry the action itself.
+      this.markActionUnknown('Connection lost before action completion was confirmed.');
+      this.fail('Connection lost while sending the gesture action.', this.generation);
+    }
+    return pending.promise;
+  };
+
+  /** Catalogs travel over the paired transport, with one bounded page per reply. */
+  listInstalledApps = (): Promise<InstalledApplication[]> => {
+    if (!this.authenticated || !this.active || !this.transport?.connected) return Promise.reject(Error('Connect to your Mac to list its apps.'));
+    if (!this.snapshot.capabilities?.includes('app_catalog')) return Promise.reject(Error('Update the Mac receiver to list installed apps.'));
+    if (this.pendingCatalog) return this.pendingCatalog.promise;
+    let resolve!: PendingCatalog['resolve']; let reject!: PendingCatalog['reject'];
+    const promise = new Promise<InstalledApplication[]>((yes, no) => { resolve = yes; reject = no; });
+    this.pendingCatalog = { id: `apps-${Date.now()}-${++this.nextCatalog}`, generation: this.generation, cursor: 0, apps: [], promise, resolve, reject };
+    this.requestCatalogPage();
+    return promise;
+  };
+  private requestCatalogPage() {
+    const pending = this.pendingCatalog;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pending.timer = setTimeout(() => this.failCatalog('The Mac app list timed out. Try refreshing.'), 15_000);
+    if (!this.write({ type: MessageType.apps_list, id: pending.id, cursor: pending.cursor })) this.failCatalog('Connection changed while loading the Mac app list.');
+  }
+  private failCatalog(message: string) {
+    const pending = this.pendingCatalog;
+    if (!pending) return;
+    this.pendingCatalog = undefined; clearTimeout(pending.timer); pending.reject(Error(message));
+  }
+
+  /** Adopt a native operation after JS remount. This only sends status queries. */
+  trackSystemAction = (action: SystemAction, id: string, serverId?: string, deviceId?: string): Promise<SystemActionCompletion> => {
+    if (this.pendingAction) {
+      if (this.pendingAction.id === id && this.pendingAction.action === action && (!serverId || this.pendingAction.serverId === serverId) && (!deviceId || this.pendingAction.deviceId === deviceId)) { this.queryPendingAction(); return this.pendingAction.promise; }
+      return Promise.reject(new SystemActionDispatchError('not_sent', 'Another gesture action is already pending.'));
+    }
+    if (!isMessage(envelope({ type: MessageType.system_action_status, action, id }, 0))) return Promise.reject(new SystemActionDispatchError('not_sent', 'Invalid gesture operation.'));
+    const pending = this.createPendingAction(action, id, serverId ?? this.snapshot.serverId, deviceId ?? this.identity?.deviceId, 'unknown');
+    this.usedActionIds.add(id);
+    this.queryPendingAction();
+    return pending.promise;
+  };
+
+  /** Explicit user recovery. Resetting does not claim that the Mac action finished. */
+  resumeSystemActions = (id: string, nativeResetConfirmed = false): boolean => {
+    if (this.pendingAction?.id !== id || (!nativeResetConfirmed && this.snapshot.systemAction?.state !== 'unknown')) return false;
+    this.abandonPendingAction('Gesture recognition was resumed before completion could be confirmed.');
+    return true;
+  };
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
   private update(patch: Partial<ConnectionSnapshot>) {
     this.snapshot = { ...this.snapshot, ...patch };
@@ -85,7 +178,7 @@ export class RemoteClient {
     const gen = ++this.generation;
     this.authenticated = false;
     this.seq = 0;
-    this.update({ status: this.retries ? 'reconnecting' : 'connecting', endpoint: this.endpoint, transport: this.target.kind, retryable: undefined, failureCode: undefined, message: undefined, serverId: undefined, serverName: undefined, latencyMs: undefined });
+    this.update({ status: this.retries ? 'reconnecting' : 'connecting', endpoint: this.endpoint, transport: this.target.kind, retryable: undefined, failureCode: undefined, message: undefined, serverId: undefined, serverName: undefined, latencyMs: undefined, capabilities: [] });
     try {
       this.identity = await this.options.credentials.getIdentity();
       if (gen !== this.generation || !this.desired || !this.active) return;
@@ -114,7 +207,7 @@ export class RemoteClient {
             if (this.target?.expectedServerId && message.serverId !== this.target.expectedServerId) { this.fail('Receiver identity does not match the saved Mac. Select and pair the correct receiver.', gen, false); return; }
             if (this.snapshot.serverId) { this.fail('Unexpected receiver greeting.', gen, false); return; }
             this.receiverPermission = message.permission;
-            this.update({ serverId: message.serverId, serverName: message.name, status: this.retries ? 'reconnecting' : 'connecting', message: 'Checking saved pairing…' });
+            this.update({ serverId: message.serverId, serverName: message.name, capabilities: message.capabilities, status: this.retries ? 'reconnecting' : 'connecting', message: 'Checking saved pairing…' });
             this.startHeartbeat(gen);
             const savedToken = await this.options.credentials.getToken(message.serverId);
             if (gen !== this.generation) return;
@@ -123,7 +216,10 @@ export class RemoteClient {
             else this.update({ status: 'authentication_required', message: 'Enter the pairing code shown on your Mac.' });
           } else if (message.serverId === this.snapshot.serverId) {
             this.receiverPermission = message.permission;
-            if (this.authenticated) this.update({ status: message.permission ? 'connected' : 'permission_required', message: message.permission ? undefined : 'Enable Accessibility for Remote Mac Control on your Mac.' });
+            if (this.authenticated) {
+              this.update({ status: message.permission ? 'connected' : 'permission_required', capabilities: message.capabilities, message: message.permission ? undefined : 'Enable Accessibility for Remote Mac Control on your Mac.' });
+              this.queryPendingAction();
+            }
           }
           break;
         }
@@ -145,6 +241,40 @@ export class RemoteClient {
           this.authenticated = true;
           this.retries = 0;
           this.update({ status: this.receiverPermission ? 'connected' : 'permission_required', message: this.receiverPermission ? undefined : 'Enable Accessibility for Remote Mac Control on your Mac.' });
+          this.queryPendingAction();
+          break;
+        }
+        case MessageType.apps_list_result: {
+          const pending = this.pendingCatalog;
+          if (!this.authenticated || !pending || pending.generation !== gen || pending.id !== message.id) break;
+          clearTimeout(pending.timer);
+          if (message.error) { this.failCatalog(message.error); break; }
+          pending.apps.push(...message.apps);
+          if (pending.apps.length > 10_000 || (message.nextCursor !== undefined && message.nextCursor <= pending.cursor)) { this.failCatalog('The Mac sent an invalid app-list page.'); break; }
+          if (message.nextCursor !== undefined) {
+            pending.cursor = message.nextCursor;
+            pending.id = `apps-${Date.now()}-${++this.nextCatalog}`;
+            this.requestCatalogPage();
+          } else {
+            this.pendingCatalog = undefined;
+            const unique = new Map(pending.apps.map(app => [app.id, app]));
+            pending.resolve([...unique.values()]);
+          }
+          break;
+        }
+        case MessageType.system_action_result: {
+          const pending = this.pendingAction;
+          if (!this.authenticated || !pending || pending.generation !== gen || pending.id !== message.id || pending.action !== message.action || message.seq < pending.minimumReplySeq) break;
+          pending.lastReply = Date.now();
+          if (message.state) {
+            if (message.state === 'unknown') this.markActionUnknown(message.message || 'Action completion is unknown. Resume gestures when ready.');
+            else { pending.dispatched = true; this.updateActionState('running', message.message || 'Action in progress…', pending.lastReply); this.scheduleActionQuery(); }
+          } else {
+            clearTimeout(this.actionTimer); this.actionTimer = undefined;
+            this.pendingAction = undefined;
+            this.update({ systemAction: undefined, message: message.ok ? undefined : message.message || 'The Mac could not complete this action.' });
+            pending.resolve({ id: message.id, action: message.action, ok: message.ok, message: message.message });
+          }
           break;
         }
         case MessageType.pong:
@@ -191,8 +321,59 @@ export class RemoteClient {
   send = (payload: ClientPayload): boolean => {
     if (!this.authenticated || !this.active) return false;
     if (this.snapshot.status !== 'connected' && payload.type !== MessageType.release_all) return false;
+    // Actions and their status requests go through the correlated API only.
+    if (payload.type === MessageType.system_action || payload.type === MessageType.system_action_status || payload.type === MessageType.apps_list) return false;
+    if (payload.type === MessageType.system_adjust && !this.snapshot.capabilities?.includes('system_adjust')) return false;
     return this.write(payload);
   };
+
+  private createPendingAction(action: SystemAction, id: string, serverId: string | undefined, deviceId: string | undefined, state: 'running' | 'unknown', dispatched = false) {
+    let resolve!: PendingAction['resolve']; let reject!: PendingAction['reject'];
+    const promise = new Promise<SystemActionCompletion>((yes, no) => { resolve = yes; reject = no; });
+    const pending: PendingAction = { action, id, serverId, deviceId, generation: this.generation, lastReply: Date.now(), dispatched, minimumReplySeq: 0, promise, resolve, reject };
+    this.pendingAction = pending;
+    this.updateActionState(state, state === 'running' ? 'Action in progress…' : 'Checking action completion…');
+    return pending;
+  }
+  private updateActionState(state: 'running' | 'unknown', message: string, confirmedAt?: number) {
+    const pending = this.pendingAction;
+    if (pending) this.update({ systemAction: { id: pending.id, action: pending.action, state, message, confirmedAt } });
+  }
+  private markActionUnknown(message: string) {
+    clearTimeout(this.actionTimer); this.actionTimer = undefined;
+    this.updateActionState('unknown', message);
+  }
+  private scheduleActionQuery() {
+    clearTimeout(this.actionTimer);
+    if (!this.pendingAction) return;
+    this.actionTimer = setTimeout(() => {
+      this.actionTimer = undefined;
+      if (!this.pendingAction) return;
+      if (Date.now() - this.pendingAction.lastReply >= ACTION_CONFIRMATION_TIMEOUT) {
+        this.markActionUnknown('Action completion is unknown. Resume gestures when ready.');
+      } else this.queryPendingAction();
+    }, ACTION_STATUS_INTERVAL);
+  }
+  private queryPendingAction() {
+    const pending = this.pendingAction;
+    if (!pending || !this.authenticated || !this.active || !this.transport?.connected) return;
+    if ((pending.serverId && pending.serverId !== this.snapshot.serverId) || (pending.deviceId && pending.deviceId !== this.identity?.deviceId)) {
+      this.markActionUnknown('This action belongs to the previous Mac connection.'); return;
+    }
+    if (!this.snapshot.capabilities?.includes('action_completion')) {
+      this.markActionUnknown('Update the Mac receiver to confirm action completion.'); return;
+    }
+    if (pending.generation !== this.generation) { pending.generation = this.generation; pending.lastReply = Date.now(); pending.minimumReplySeq = this.seq + 1; }
+    pending.serverId ??= this.snapshot.serverId; pending.deviceId ??= this.identity?.deviceId;
+    if (this.write({ type: MessageType.system_action_status, id: pending.id, action: pending.action })) this.scheduleActionQuery();
+  }
+  private abandonPendingAction(message: string) {
+    const pending = this.pendingAction;
+    if (!pending) return;
+    clearTimeout(this.actionTimer); this.actionTimer = undefined; this.pendingAction = undefined;
+    this.update({ systemAction: undefined });
+    pending.reject(new SystemActionDispatchError('unknown', message));
+  }
 
   private write(payload: ClientPayload): boolean {
     const transport = this.transport;
@@ -233,6 +414,8 @@ export class RemoteClient {
   }
 
   private closeSocket() {
+    this.failCatalog('Connection changed while loading the Mac app list.');
+    if (this.pendingAction) this.markActionUnknown('Connection changed before action completion was confirmed.');
     ++this.generation;
     clearTimeout(this.connectTimer);
     clearTimeout(this.authTimer);
@@ -256,7 +439,7 @@ export class RemoteClient {
     if (this.authenticated) this.write({ type: MessageType.release_all });
     if (clearIntent) this.desired = false;
     this.closeSocket();
-    this.update({ status: 'disconnected', message: undefined, latencyMs: undefined });
+    this.update({ status: 'disconnected', message: undefined, latencyMs: undefined, capabilities: [] });
   };
 
   setActive = (active: boolean): void => {
@@ -265,5 +448,5 @@ export class RemoteClient {
     else { this.active = true; if (this.desired) { this.retries = 0; void this.open(); } }
   };
 
-  dispose = (): void => { this.disconnect(); this.listeners.clear(); };
+  dispose = (): void => { this.disconnect(); this.abandonPendingAction('The connection was closed before completion was confirmed.'); this.listeners.clear(); };
 }

@@ -1,5 +1,6 @@
 import type { TransportKind, TransportMode, BluetoothPeer } from './Transport';
 import type { Endpoint } from './endpoint';
+import type { SystemAction } from '../../shared/protocol';
 export type { Endpoint } from './endpoint';
 
 export interface Identity { deviceId: string; deviceName: string }
@@ -10,6 +11,11 @@ export interface CredentialStore {
   removeToken(serverId: string): Promise<void>;
 }
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'authentication_required' | 'permission_required' | 'connected' | 'reconnecting' | 'error';
+export interface SystemActionCompletion { id: string; action: SystemAction; ok: boolean; message?: string }
+export interface PendingSystemAction { id: string; action: SystemAction; state: 'running' | 'unknown'; message: string; confirmedAt?: number }
+export class SystemActionDispatchError extends Error {
+  constructor(readonly delivery: 'not_sent' | 'unknown', message: string) { super(message); this.name = 'SystemActionDispatchError'; }
+}
 export interface ConnectionSnapshot {
   status: ConnectionStatus;
   transport?: TransportKind;
@@ -20,8 +26,10 @@ export interface ConnectionSnapshot {
   message?: string;
   serverName?: string;
   serverId?: string;
+  capabilities?: string[];
   latencyMs?: number;
   endpoint?: Endpoint;
+  systemAction?: PendingSystemAction;
 }
 export interface SocketLike {
   readyState: number;

@@ -22,6 +22,54 @@ final class SessionHarness {
     func pair() { receive(.authentication, seq: 1,["deviceId":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee","deviceName":"Phone","code":pairing.code]) }
 }
 final class SessionTests {
+    @Test(arguments: ["volume", "brightness"])
+    func testSystemAdjustmentsRequireAuthenticatedPermittedSession(_ control: String) throws {
+        let data = try JSONSerialization.data(withJSONObject: ["v": 1, "type": "system_adjust", "seq": 2, "timestamp": 1, "control": control, "steps": -2])
+        let unknown = try SessionHarness(); unknown.session.receive(data)
+        expectTrue(unknown.sink.actions.isEmpty)
+        expectEqual(unknown.responses.last?.string("code"), "authentication_required")
+
+        let denied = try SessionHarness(); denied.permission = false; denied.pair(); denied.session.receive(data)
+        expectTrue(denied.sink.actions.isEmpty)
+        expectEqual(denied.responses.last?.string("state"), "permission_required")
+
+        let ready = try SessionHarness(); ready.pair(); ready.session.receive(data)
+        let expected: [InputAction] = [.systemAdjust(try unwrap(SystemControl(rawValue: control)), steps: -2)]
+        expectEqual(ready.sink.actions, expected)
+        ready.session.receive(data)
+        expectEqual(ready.sink.actions, expected)
+        expectEqual(ready.responses.last?.string("code"), "replayed_message")
+    }
+    @Test func testReceiverAdvertisesSystemAdjustments() throws {
+        let h = try SessionHarness(); h.session.hello()
+        expectTrue((h.responses.first?.fields["capabilities"] as? [String] ?? []).contains("system_adjust"))
+    }
+    @Test(arguments: ["screenshot", "kill_app", "lock", "photo_booth"])
+    func testSystemActionsRequireAuthenticatedPermittedSession(_ action: String) throws {
+        let unknown = try SessionHarness()
+        unknown.receive(.systemAction, seq: 1, ["action": action])
+        expectTrue(unknown.sink.actions.isEmpty)
+        expectEqual(unknown.responses.last?.string("code"), "authentication_required")
+
+        let denied = try SessionHarness(); denied.permission = false; denied.pair()
+        denied.receive(.systemAction, seq: 2, ["action": action])
+        expectTrue(denied.sink.actions.isEmpty)
+        expectEqual(denied.responses.last?.string("state"), "permission_required")
+
+        let ready = try SessionHarness(); ready.pair()
+        ready.receive(.systemAction, seq: 2, ["action": action])
+        expectEqual(ready.sink.actions, [.system(try unwrap(SystemAction(rawValue: action)))])
+        ready.receive(.systemAction, seq: 2, ["action": action])
+        expectEqual(ready.sink.actions, [.system(try unwrap(SystemAction(rawValue: action)))])
+        expectEqual(ready.responses.last?.string("code"), "replayed_message")
+    }
+    @Test func testReceiverAdvertisesSystemActions() throws {
+        let h = try SessionHarness(); h.session.hello()
+        let capabilities = h.responses.first?.fields["capabilities"] as? [String] ?? []
+        expectTrue(capabilities.contains("system_actions"))
+        expectTrue(capabilities.contains("photo_booth"))
+    }
+
     @Test func testUnsupportedGestureReportsErrorWithoutClosingConnection() throws {
         let h = try SessionHarness(); h.pair()
         h.receive(.mouseGesture, seq: 2, ["gesture": "swipe", "fingers": 2, "direction": "up"])

@@ -20,6 +20,10 @@ final class CommandLoggingTests {
             (.keyboardDown, ["key": "up", "modifiers": ["control"], "repeat": false]),
             (.keyboardUp, ["key": "up", "modifiers": ["control"]]),
             (.keyboardText, ["text": "Private composed text"]),
+            (.systemAction, ["action": "screenshot"]),
+            (.systemActionStatus, ["id": "status-probe", "action": "screenshot"]),
+            (.appsList, ["id": "catalog-probe"]),
+            (.systemAdjust, ["control": "brightness", "steps": -3]),
             (.releaseAll, [:]), (.ping, ["id": "probe\nsecond line"])
         ]
         for (offset, command) in commands.enumerated() {
@@ -35,6 +39,15 @@ final class CommandLoggingTests {
             expectEqual(entry["deviceId"] as? String, h.session.deviceID)
             expectTrue(entry["receivedAt"] is String)
             expectEqual((command["seq"] as? NSNumber)?.intValue, index + 1)
+            if command["type"] as? String == "system_action" {
+                expectEqual(command["action"] as? String, "screenshot")
+                expectEqual(entry["result"] as? String, "dispatched")
+            }
+            if command["type"] as? String == "system_adjust" {
+                expectEqual(command["control"] as? String, "brightness")
+                expectEqual((command["steps"] as? NSNumber)?.intValue, -3)
+                expectEqual(entry["result"] as? String, "dispatched")
+            }
             if command["type"] as? String == "keyboard_down" {
                 expectEqual(command["key"] as? String, "up")
                 expectEqual(command["modifiers"] as? [String], ["control"])

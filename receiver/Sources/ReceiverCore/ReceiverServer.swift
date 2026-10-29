@@ -22,7 +22,8 @@ public final class ReceiverServer {
     private let bluetoothEnabled: Bool
     private var bluetooth: BluetoothPeripheral?
     private var bluetoothStatus = "Disabled"
-    private lazy var coordinator = ReceiverSessionCoordinator(pairing: pairing, sink: sink, serverID: serverID, name: name, permission: permission)
+    private lazy var coordinator = ReceiverSessionCoordinator(pairing: pairing, sink: sink, serverID: serverID, name: name, permission: permission,
+        executeCompletion: { [weak self] completion in self?.queue.async(execute: completion) })
     private var listeningPort: UInt16 = 0
 
     public struct Snapshot {

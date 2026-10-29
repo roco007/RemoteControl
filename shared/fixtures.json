@@ -162,6 +162,231 @@
       "type": "error",
       "code": "permission_required",
       "message": "Enable Accessibility"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "system_action",
+      "action": "screenshot"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "system_action",
+      "action": "kill_app"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "system_action",
+      "action": "lock"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 24,
+      "timestamp": 1738000000024,
+      "action": "photo_booth"
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": -16
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": -1
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": 1
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": 16
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "brightness",
+      "steps": -16
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "brightness",
+      "steps": -1
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "brightness",
+      "steps": 1
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "brightness",
+      "steps": 16
+    },
+    {
+      "v": 1,
+      "seq": 2,
+      "timestamp": 123456789,
+      "type": "system_action",
+      "action": "lock",
+      "id": "gesture-action-2"
+    },
+    {
+      "v": 1,
+      "seq": 2,
+      "timestamp": 123456789,
+      "type": "system_action_result",
+      "action": "lock",
+      "id": "gesture-action-2",
+      "ok": true
+    },
+    {
+      "v": 1,
+      "seq": 2,
+      "timestamp": 123456789,
+      "type": "system_action_result",
+      "action": "lock",
+      "id": "gesture-action-2",
+      "ok": false,
+      "message": "The action could not finish."
+    },
+    {
+      "v": 1,
+      "seq": 3,
+      "timestamp": 123456789,
+      "id": "gesture-action-2",
+      "action": "lock",
+      "type": "system_action_status"
+    },
+    {
+      "v": 1,
+      "seq": 3,
+      "timestamp": 123456789,
+      "id": "gesture-action-2",
+      "action": "lock",
+      "type": "system_action_result",
+      "ok": false,
+      "state": "running"
+    },
+    {
+      "v": 1,
+      "seq": 3,
+      "timestamp": 123456789,
+      "id": "gesture-action-2",
+      "action": "lock",
+      "type": "system_action_result",
+      "ok": false,
+      "state": "unknown",
+      "message": "Action status is unavailable."
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "system_action",
+      "action": "open_app",
+      "appId": "/System/Applications/Calculator.app",
+      "id": "open-app-1"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "system_action",
+      "action": "run_command",
+      "command": "printf hello",
+      "id": "command-1"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "apps_list",
+      "id": "catalog-1",
+      "cursor": 0
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "apps_list_result",
+      "id": "catalog-1",
+      "apps": [
+        {
+          "id": "/A.app",
+          "name": "A",
+          "icon": "data:image/png;base64,YQ=="
+        }
+      ],
+      "nextCursor": 1
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "apps_list_result",
+      "id": "catalog-1",
+      "apps": [],
+      "error": "Cannot list apps."
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "https://example.com/path?key=value#section"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "http://localhost:3000/"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "https://[::1]:8443/"
     }
   ],
   "invalid": [
@@ -417,6 +642,471 @@
       "type": "error",
       "code": "permission_required",
       "message": ""
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "system_action"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "system_action",
+      "action": "shell"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "system_action",
+      "action": 1
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "system_action",
+      "action": "kill_app",
+      "app": "Terminal"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 123456789,
+      "type": "system_action",
+      "action": "screenshot",
+      "command": "anything"
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": 0
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": 17
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": -17
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": 1.5
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": -1.5
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": true
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": "1"
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": null
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "keyboard_backlight",
+      "steps": 1
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume"
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "steps": 1
+    },
+    {
+      "v": 1,
+      "type": "system_adjust",
+      "seq": 1,
+      "timestamp": 1,
+      "control": "volume",
+      "steps": 1,
+      "command": "shell"
+    },
+    {
+      "v": 1,
+      "seq": 2,
+      "timestamp": 123456789,
+      "type": "system_action",
+      "action": "lock",
+      "id": ""
+    },
+    {
+      "v": 1,
+      "seq": 2,
+      "timestamp": 123456789,
+      "type": "system_action",
+      "action": "lock",
+      "id": null
+    },
+    {
+      "v": 1,
+      "seq": 2,
+      "timestamp": 123456789,
+      "type": "system_action_result",
+      "action": "lock",
+      "id": "",
+      "ok": true
+    },
+    {
+      "v": 1,
+      "seq": 2,
+      "timestamp": 123456789,
+      "type": "system_action_result",
+      "action": "lock",
+      "id": "gesture-action-2",
+      "ok": "true"
+    },
+    {
+      "v": 1,
+      "seq": 2,
+      "timestamp": 123456789,
+      "type": "system_action_result",
+      "action": "arbitrary_app",
+      "id": "gesture-action-2",
+      "ok": true
+    },
+    {
+      "v": 1,
+      "seq": 2,
+      "timestamp": 123456789,
+      "type": "system_action_result",
+      "action": "lock",
+      "id": "gesture-action-2",
+      "ok": true,
+      "message": ""
+    },
+    {
+      "v": 1,
+      "seq": 2,
+      "timestamp": 123456789,
+      "type": "system_action_result",
+      "action": "lock",
+      "ok": true
+    },
+    {
+      "v": 1,
+      "seq": 2,
+      "timestamp": 123456789,
+      "type": "system_action_result",
+      "action": "lock",
+      "id": "gesture-action-2",
+      "ok": true,
+      "unexpected": true
+    },
+    {
+      "v": 1,
+      "seq": 3,
+      "timestamp": 123456789,
+      "id": "",
+      "action": "lock",
+      "type": "system_action_status"
+    },
+    {
+      "v": 1,
+      "seq": 3,
+      "timestamp": 123456789,
+      "id": "gesture-action-2",
+      "action": "lock",
+      "type": "system_action_result",
+      "ok": true,
+      "state": "running"
+    },
+    {
+      "v": 1,
+      "seq": 3,
+      "timestamp": 123456789,
+      "id": "gesture-action-2",
+      "action": "lock",
+      "type": "system_action_result",
+      "ok": false,
+      "state": "finished"
+    },
+    {
+      "v": 1,
+      "seq": 3,
+      "timestamp": 123456789,
+      "id": "gesture-action-2",
+      "action": "lock",
+      "type": "system_action_status",
+      "ok": true
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "system_action",
+      "action": "open_app",
+      "id": "x"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "system_action",
+      "action": "open_app",
+      "appId": "/A.app"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "system_action",
+      "action": "run_command",
+      "command": "",
+      "id": "x"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "system_action",
+      "action": "run_command",
+      "command": " \n ",
+      "id": "x"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "system_action",
+      "action": "run_command",
+      "command": "x\u0000y",
+      "id": "x"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "system_action",
+      "action": "lock",
+      "command": "pwd",
+      "id": "x"
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "apps_list",
+      "id": "x",
+      "cursor": -1
+    },
+    {
+      "v": 1,
+      "seq": 1,
+      "timestamp": 1,
+      "type": "apps_list_result",
+      "id": "x",
+      "apps": [
+        {
+          "id": "/A.app",
+          "name": "A",
+          "icon": "https://example.com/icon.png"
+        }
+      ]
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "javascript:alert(1)"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "file:///tmp/example"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "https:example.com"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "//example.com"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "https://"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "https://user:password@example.com"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "https://example.com/a b"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "https://example.com/\npath"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "https://example.com\\path"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": " https://example.com"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "https://example.com "
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "https:///path"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "https://example.com",
+      "appId": "/Applications/Test.app"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "url-fixture",
+      "url": "https://example.com",
+      "command": "true"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "url": "https://example.com"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "open_url",
+      "id": "missing"
+    },
+    {
+      "v": 1,
+      "type": "system_action",
+      "seq": 1,
+      "timestamp": 1,
+      "action": "lock",
+      "url": "https://example.com"
     }
   ],
   "malformed": [

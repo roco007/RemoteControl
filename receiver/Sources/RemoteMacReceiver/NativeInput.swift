@@ -1,19 +1,116 @@
 import AppKit
 import CoreGraphics
+import ApplicationServices
+import IOKit.hidsystem
 import ReceiverCore
 
 final class NativeInput: InputSink {
+    private let inputQueue = DispatchQueue(label: "com.remotemac.receiver.input", qos: .userInteractive)
+    private var screenLock: ScreenLockController!
+    var onLockStatus: ((String) -> Void)?
+    private let applicationCatalog = ApplicationCatalog()
     private let source = CGEventSource(stateID: .privateState)
     private let postEvent: (CGEvent) -> Void
+    private let forceQuitFrontmost: (@escaping (Bool, String?) -> Void) -> Void
+    private let openURL: (URL, @escaping (Bool) -> Void) -> Void
+    private let playYouTube: (YouTubeMediaTarget, @escaping (Bool, String?) -> Void) -> Void
+    private let openPhotoBooth: (@escaping (Bool, String?) -> Void) -> Void
     private var scrollX = 0.0
     private var scrollY = 0.0
     private var capsLockState = CapsLockState(initial: CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift), physical: CGEventSource.flagsState(.hidSystemState).contains(.maskAlphaShift))
 
-    init(postEvent: @escaping (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }) {
+    init(postEvent: @escaping (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) },
+         forceQuitFrontmost: @escaping (@escaping (Bool, String?) -> Void) -> Void = NativeInput.forceQuitFrontmostApplication,
+         openPhotoBooth: @escaping (@escaping (Bool, String?) -> Void) -> Void = NativeInput.openPhotoBoothApplication,
+         openURL: @escaping (URL, @escaping (Bool) -> Void) -> Void = NativeInput.openWebURL,
+         playYouTube: @escaping (YouTubeMediaTarget, @escaping (Bool, String?) -> Void) -> Void = YouTubeWebAppLauncher.open,
+         screenLockState: @escaping () -> ScreenLockState = MacScreenLockState.current,
+         unlockPassword: @escaping () throws -> String? = { try MacUnlockCredentialStore().password() },
+         displayWake: DisplayWake = .system(),
+         accessibilityAllowed: @escaping () -> Bool = { AXIsProcessTrusted() }) {
         self.postEvent = postEvent
+        self.forceQuitFrontmost = forceQuitFrontmost
+        self.openPhotoBooth = openPhotoBooth
+        self.openURL = openURL
+        self.playYouTube = playYouTube
+        screenLock = ScreenLockController(state: screenLockState, allowed: accessibilityAllowed,
+            password: unlockPassword,
+            lock: { [weak self] in _ = self?.systemShortcut("q", modifiers: ["control", "command"]) },
+            key: { [weak self] in self?.postUnlockKey($0) },
+            text: { [weak self] password in
+                // An already-awake login field may contain Space or a partial password.
+                // Replace its contents, releasing Command before the Unicode events.
+                self?.systemShortcut("a", modifiers: ["command"])
+                self?.emit(.text(password))
+            },
+            display: displayWake,
+            schedule: { [weak self] delay, step in self?.inputQueue.asyncAfter(deadline: .now() + delay, execute: step) },
+            report: { [weak self] message in
+                DispatchQueue.main.async { [weak self] in self?.onLockStatus?(message) }
+            })
+    }
+
+    func cancelForSystemSleep() {
+        inputQueue.sync { screenLock.cancelForSystemSleep() }
     }
 
     func post(_ action: InputAction) {
+        if case .system(let system) = action { performSystemAction(system) { _, _ in }; return }
+        if case .openApplication(let id) = action { performSystemAction(.openApp, parameters: ["appId": id]) { _, _ in }; return }
+        if case .openURL(let url) = action { performSystemAction(.openURL, parameters: ["url": url]) { _, _ in }; return }
+        if case .runCommand(let command) = action { performSystemAction(.runCommand, parameters: ["command": command]) { _, _ in }; return }
+        inputQueue.sync {
+            // Keep remote cursor/keyboard/shortcuts from changing focus during password entry.
+            guard !screenLock.isEnteringPassword else { return }
+            emit(action)
+        }
+    }
+
+    func listApplications(refresh: Bool, completion: @escaping ([InstalledApplication], String?) -> Void) {
+        applicationCatalog.list(refresh: refresh, completion: completion)
+    }
+
+    func performSystemAction(_ action: SystemAction, completion: @escaping (Bool, String?) -> Void) {
+        performSystemAction(action, parameters: [:], completion: completion)
+    }
+
+    func performSystemAction(_ action: SystemAction, parameters: [String: String], completion: @escaping (Bool, String?) -> Void) {
+        inputQueue.sync {
+            guard !screenLock.isEnteringPassword else { completion(false, "Unlock is still running."); return }
+            switch action {
+            case .screenshot:
+                let sent = systemShortcut("3", modifiers: ["command", "shift"])
+                // macOS exposes no completion callback for this keyboard shortcut.
+                // Confirm balanced emission only, never claim a capture/file was saved.
+                completion(sent, sent ? "Screenshot shortcut sent. macOS does not report capture completion." : "Could not send the screenshot shortcut.")
+            case .lock: screenLock.toggle(completion: completion)
+            case .killApp: forceQuitFrontmost(completion)
+            case .photoBooth: openPhotoBooth(completion)
+            case .openApp:
+                guard let id = parameters["appId"], !id.isEmpty else { completion(false, "Choose a Mac app first."); return }
+                applicationCatalog.open(id: id, completion: completion)
+            case .openURL:
+                guard let value = parameters["url"], let url = HTTPURL.parse(value) else { completion(false, "Enter a valid HTTP or HTTPS URL."); return }
+                do {
+                    if let target = try YouTubeMediaTarget.resolve(url) {
+                        playYouTube(target, completion)
+                        return
+                    }
+                } catch {
+                    completion(false, (error as? LocalizedError)?.errorDescription ?? "Could not open this YouTube media link.")
+                    return
+                }
+                openURL(url) { ok in
+                    completion(ok, ok ? "URL handed to macOS. Page loading is not tracked." : "No application could open this URL.")
+                }
+            case .runCommand:
+                guard let command = parameters["command"], !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { completion(false, "Enter a command first."); return }
+                ShellCommandRunner.run(command, completion: completion)
+            }
+        }
+    }
+
+    private func emit(_ action: InputAction) {
         switch action {
         case let .move(dx, dy, dragging):
             guard let location = CGEvent(source: nil)?.location else { return }
@@ -52,6 +149,9 @@ final class NativeInput: InputSink {
             event.flags = flags
             event.setIntegerValueField(.keyboardEventAutorepeat, value: repeating ? 1 : 0)
             postEvent(event)
+        case .system, .openApplication, .runCommand, .openURL: break // Routed through performSystemAction before entering emit.
+        case let .systemAdjust(control, steps):
+            adjustSystem(control, steps: steps)
         case .text(let text):
             // Small UTF-16 chunks work across editors while preserving surrogate pairs.
             var chunk = ""
@@ -60,6 +160,80 @@ final class NativeInput: InputSink {
                 chunk.unicodeScalars.append(scalar)
             }
             if !chunk.isEmpty { postText(chunk) }
+        }
+    }
+
+    @discardableResult private func systemShortcut(_ key: String, modifiers: [String]) -> Bool {
+        guard let code = KeyCodes.values[key],
+              let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false) else { return false }
+        down.flags = flagsFor(modifiers); up.flags = []
+        postEvent(down); postEvent(up)
+        return true
+    }
+
+    private func adjustSystem(_ control: SystemControl, steps: Int) {
+        // Native media keys preserve macOS output/display selection and show its OSD.
+        // Option-Shift requests the small increment instead of a full keyboard notch.
+        guard steps != 0, (-Wire.maxSystemAdjustSteps...Wire.maxSystemAdjustSteps).contains(steps) else { return }
+        let key = control == .volume
+            ? (steps > 0 ? NX_KEYTYPE_SOUND_UP : NX_KEYTYPE_SOUND_DOWN)
+            : (steps > 0 ? NX_KEYTYPE_BRIGHTNESS_UP : NX_KEYTYPE_BRIGHTNESS_DOWN)
+        for _ in 0..<abs(steps) {
+            let events = [NX_KEYDOWN, NX_KEYUP].compactMap { state in
+                NSEvent.otherEvent(with: .systemDefined, location: .zero,
+                    modifierFlags: [.shift, .option], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: 0, context: nil, subtype: Int16(NX_SUBTYPE_AUX_CONTROL_BUTTONS),
+                    data1: (Int(key) << 16) | (Int(state) << 8), data2: -1)?.cgEvent
+            }
+            // Construct the complete pair before posting so allocation failure cannot leave a key held.
+            guard events.count == 2 else { return }
+            events.forEach(postEvent)
+        }
+    }
+
+    private func postUnlockKey(_ code: CGKeyCode) {
+        for down in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else { continue }
+            event.flags = []
+            postEvent(event)
+        }
+    }
+
+    static func canForceQuit(processID: pid_t, bundleIdentifier: String?, regular: Bool,
+                             ownProcessID: pid_t = ProcessInfo.processInfo.processIdentifier) -> Bool {
+        guard regular, processID > 1, processID != ownProcessID else { return false }
+        let protected = ["com.apple.finder", "com.apple.loginwindow", "com.apple.dock",
+                         "com.apple.systemuiserver", "com.apple.controlcenter", "com.remotemac.receiver"]
+        return !protected.contains(bundleIdentifier?.lowercased() ?? "")
+    }
+
+    private static func forceQuitFrontmostApplication(completion: @escaping (Bool, String?) -> Void) {
+        DispatchQueue.main.async {
+            guard let application = NSWorkspace.shared.frontmostApplication,
+                  canForceQuit(processID: application.processIdentifier, bundleIdentifier: application.bundleIdentifier,
+                               regular: application.activationPolicy == .regular) else {
+                completion(false, "The frontmost application cannot be terminated."); return
+            }
+            ApplicationTermination.perform(start: application.forceTerminate, terminated: { application.isTerminated },
+                schedule: { delay, next in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: next) }, completion: completion)
+        }
+    }
+
+    private static func openWebURL(_ url: URL, completion: @escaping (Bool) -> Void) {
+        DispatchQueue.main.async { completion(NSWorkspace.shared.open(url)) }
+    }
+
+    private static func openPhotoBoothApplication(completion: @escaping (Bool, String?) -> Void) {
+        DispatchQueue.main.async {
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.PhotoBooth") else {
+                completion(false, "Photo Booth is not installed."); return
+            }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { application, error in
+                completion(application != nil && error == nil, error == nil && application != nil ? nil : "Photo Booth could not open.")
+            }
         }
     }
 

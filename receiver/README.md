@@ -56,6 +56,20 @@ Pinch messages map to one Command-plus/minus application zoom step. Two-finger h
 
 Disconnect, explicit `release_all`, timeout, sleep, revocation, malformed/replayed frames, and permission loss release tracked keys/buttons. Composed Unicode is ignored while a shortcut modifier is held to avoid accidental commands.
 
+Gesture actions can open any app selected from this Mac's installed-app list, or run a saved shell command. The authenticated app catalog scans `/Applications`, `/System/Applications`, and `~/Applications`, includes friendly names and PNG icons, and sends pages within the 16 KB protocol frame limit over Wi-Fi or Bluetooth. App actions retain the exact installed `.app` path and launch through `NSWorkspace`; a removed app returns an error so it can be selected again.
+
+**Run command on Mac** executes the saved command through `/bin/zsh -lc` as the receiver's logged-in user, starting in that user's home directory. It reports the command's exit status; after 20 seconds it stops the shell's foreground process group and reports timeout. Output is discarded and command contents are redacted from logs. The same pairing, Accessibility, single-action guard, and request-ID recovery used by existing system actions apply; repeating an ID with changed parameters is rejected. Ordered gesture lists wait for each reported result, so a timed-out or disconnected acknowledgement is never treated as permission to replay a command.
+
+## Lock/Unlock Mac
+
+Any gesture assigned **Lock/Unlock Mac** uses the existing `lock` action (Left and Triple shake are its defaults). The receiver checks the current console session state for every request: it sends Control-Command-Q when unlocked, or attempts the configured password sequence when locked. Existing saved gesture mappings work unchanged over Wi-Fi, Bluetooth, and Android background Wi-Fi control.
+
+In the receiver window, enter and save your **Mac login password** to enable unlocking. The receiver stores it in the local login Keychain; use the window's clear action to remove it. For a terminal launch, `MAC_UNLOCK_TEXT` supplies an override instead of the saved password. The password is never sent to the phone, included in the protocol, or written to command logs. Saving a password enables an authenticated paired phone to unlock this Mac.
+
+When the display is asleep, the receiver first requests display wake through macOS, waits up to five seconds for an active, awake display, and gives the waking login screen a short settling interval. No password keys are sent before that point. It then uses native Quartz key events: press Space, wait 0.2 seconds, select any existing password-field text with Command-A and replace it with the configured password, wait 0.2 seconds, then press Return. It checks that the session is still locked, the display is awake, and Accessibility remains allowed before typing and submitting. The action guard suppresses overlapping input throughout waking and unlocking. Wake failure stops without password input; passwords are never retried automatically. A full system-sleep notification cancels pending callbacks, and the temporary wake assertion is released on every completion or cancellation. An unknown session state or absent password prevents unlocking. Accessibility must remain enabled.
+
+This supports a locked Mac with its display asleep while the receiver is running. A fully sleeping Mac cannot process the command until it wakes; Wake-on-LAN is not added by this change. This works only while the user is already logged in. It cannot unlock FileVault at boot or perform the first login after a restart. macOS may still reject the entered password or input events; updated gesture clients receive a correlated result based on the observed lock state and remain paused until that outcome is known. After the lock shortcut or password submission, the receiver checks the state immediately and every 50 milliseconds, completing as soon as the transition is observed within the existing one-second confirmation deadline. Validate the complete lock/unlock gesture on your Mac after setup. An ad-hoc rebuild can require macOS Keychain access to be authorized again; re-save through the receiver while the Mac is awake and approve the appropriate system prompt. The saved-password label reports item existence, not a successful protected-data read.
+
 ## Diagnostics and tests
 
 Every incoming JSON command produces one structured log line containing the receive time, session/device ID, command type and fields (including keys, modifiers, mouse deltas, and sequence), and result. `dispatched` means the command reached the input handler; it does not confirm that macOS or the target app acted on it. Rejected commands include a result such as `permission_required` or `replayed_message`. Invalid or rate-limited payloads log only metadata and the rejection reason, never the raw payload.
@@ -66,7 +80,7 @@ Logs appear immediately in the terminal when running `npm run receiver`. For an 
 /usr/bin/log stream --level info --style compact --predicate 'subsystem == "com.remotemac.receiver" AND category == "commands"'
 ```
 
-Pairing codes, authentication tokens, and composed `keyboard_text` content are redacted; composed text includes its UTF-16 length. Individual physical key names and modifiers are included. WebSocket control frames and transport rejections before JSON command handling are outside this command log.
+Pairing codes, authentication tokens, composed `keyboard_text` content, and shell command contents are redacted; composed text and commands include their UTF-16 lengths. Individual physical key names and modifiers are included. WebSocket control frames and transport rejections before JSON command handling are outside this command log.
 
 ```sh
 "dist/Remote Mac Control.app/Contents/MacOS/RemoteMacReceiver" --diagnostics
@@ -76,8 +90,14 @@ bash receiver/scripts/test.sh
 
 Diagnostics reports permission, network addresses, default port, Bonjour service and protocol version without starting a listener. Tests use an in-memory trust store and recording input sink; they never post input or modify the Keychain. The test wrapper handles the standalone command-line toolchain's missing XCTest and incomplete Swift Testing Foundation overlay. A full Xcode toolchain uses the regular `swift test` path.
 
+For the optional native app/command smoke check, run `REMOTE_MAC_ACTION_SMOKE=1 bash receiver/scripts/test.sh --filter ApplicationCommandTests` from the repository root. It lists real installed apps/icons, runs `/usr/bin/true`, opens Calculator, verifies its running process, and closes Calculator only if this check launched it. The ordinary suite runs isolated command exit/timeout tests and temporary fake-bundle discovery without opening apps.
+
 `--verify-input` explicitly tests real native input in its own focused text field: eight-pixel cursor movement and restoration, Unicode insertion, Backspace, and Command-A. It starts no listener and touches no credentials. Results are printed as JSON. It aborts on focus loss and posts no events if permission is missing. Run it while you are not using the mouse/keyboard. A CLI check does not grant permission to the separately opened app. Physical Caps Lock changes are reconciled before remote key events; the phone's Caps indicator reflects its own toggle, not a two-way hardware state display.
 
 For browser integration tests only, the harness below accepts an exact preview origin via `REMOTE_MAC_TEST_ORIGIN=http://localhost:8084`.
 
 `ReceiverIntegrationHarness` is a test-only executable, never bundled in the production app. Build with `swift build --package-path receiver --product ReceiverIntegrationHarness`. Run `receiver/.build/debug/ReceiverIntegrationHarness /absolute/new/state.json`. It binds **127.0.0.1 only** on an OS-selected port with actual Network.framework WebSocket transport, in-memory credentials and a recording sink. It writes a private mode-0600 state file containing port, temporary code, permission, session and recorded actions. `SIGUSR1` toggles test permission, `SIGUSR2` revokes test devices, and `SIGTERM` cleans up the file. It neither advertises Bonjour nor posts native events. This harness verifies transport/session behavior, not physical-device reachability or actual OS input delivery.
+
+### YouTube URL routing
+
+`open_url` routes supported YouTube and YouTube Music media links into their respective installed Chrome web apps, using the registered Chrome profile and the full media URL. It discovers app IDs from the installed bundle metadata and Chrome Local State. Other HTTP(S) links keep the normal macOS handler. A successful result confirms the launch request, not playback. This runs inside the receiver and does not require the companion `testServer` HTTP service. See [gesture action lists](../docs/GESTURE_ACTION_LISTS.md#youtube-links-on-mac).

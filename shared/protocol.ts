@@ -1,8 +1,19 @@
+import { isOpenUrl } from './openUrl';
+export { isOpenUrl, normalizeOpenUrl, MAX_OPEN_URL_LENGTH } from './openUrl';
 import { MessageType, PROTOCOL } from './constants';
 export { MessageType, PROTOCOL } from './constants';
 export type Button = typeof PROTOCOL.buttons[number];
 export type Modifier = typeof PROTOCOL.modifiers[number];
 export type Key = typeof PROTOCOL.keys[number];
+export type SystemAction = typeof PROTOCOL.systemActions[number];
+export type BuiltinSystemAction = Exclude<SystemAction, 'open_app' | 'run_command' | 'open_url'>;
+export type SystemActionRequest =
+  | { action: BuiltinSystemAction; appId?: never; command?: never; url?: never }
+  | { action: 'open_app'; appId: string; command?: never; url?: never }
+  | { action: 'run_command'; command: string; appId?: never; url?: never }
+  | { action: 'open_url'; url: string; appId?: never; command?: never };
+export type InstalledApplication = { id: string; name: string; icon?: string };
+export type SystemControl = typeof PROTOCOL.systemControls[number];
 export type Direction = typeof PROTOCOL.directions[number];
 export type Envelope = { v: 1; seq: number; timestamp: number };
 export type ClientPayload =
@@ -15,12 +26,18 @@ export type ClientPayload =
   | { type: 'keyboard_down'; key: Key; modifiers: Modifier[]; repeat: boolean }
   | { type: 'keyboard_up'; key: Key; modifiers: Modifier[] }
   | { type: 'keyboard_text'; text: string }
+  | ({ type: 'system_action'; id?: string } & SystemActionRequest)
+  | { type: 'apps_list'; id: string; cursor?: number }
+  | { type: 'system_action_status'; action: SystemAction; id: string }
+  | { type: 'system_adjust'; control: SystemControl; steps: number }
   | { type: 'release_all' }
   | { type: 'ping'; id: string };
 export type ServerPayload =
   | { type: 'connection'; state: 'hello' | 'ready' | 'permission_required' | 'busy'; serverId: string; name: string; permission: boolean; capabilities: string[] }
   | { type: 'authentication_result'; ok: boolean; serverId: string; permission: boolean; token?: string; error?: string }
   | { type: 'pong'; id: string }
+  | { type: 'system_action_result'; id: string; action: SystemAction; ok: boolean; message?: string; state?: 'running' | 'unknown' }
+  | { type: 'apps_list_result'; id: string; apps: InstalledApplication[]; nextCursor?: number; error?: string }
   | { type: 'error'; code: string; message: string };
 export type ClientMessage = ClientPayload & Envelope;
 export type ServerMessage = ServerPayload & Envelope;
@@ -38,14 +55,23 @@ const fields: Record<string, string[]> = {
   authentication_result: ['ok', 'serverId', 'permission', 'token', 'error'],
   mouse_move: ['dx', 'dy'], mouse_scroll: ['dx', 'dy'], mouse_down: ['button'], mouse_up: ['button'], mouse_click: ['button', 'count'],
   mouse_gesture: ['gesture', 'amount', 'direction', 'fingers'], keyboard_down: ['key', 'modifiers', 'repeat'], keyboard_up: ['key', 'modifiers'],
-  keyboard_text: ['text'], release_all: [], ping: ['id'], pong: ['id'], error: ['code', 'message'],
+  keyboard_text: ['text'], system_action: ['action', 'id', 'appId', 'command', 'url'], system_action_status: ['action', 'id'], system_action_result: ['id', 'action', 'ok', 'message', 'state'], system_adjust: ['control', 'steps'], release_all: [], ping: ['id'], pong: ['id'], error: ['code', 'message'],
 };
+fields.apps_list = ['id', 'cursor'];
+fields.apps_list_result = ['id', 'apps', 'nextCursor', 'error'];
 const str = (x: unknown, max: number, min = 1): x is string => typeof x === 'string' && x.length >= min && x.length <= max;
 const number = (x: unknown, max: number, min = -max): x is number => typeof x === 'number' && Number.isFinite(x) && x >= min && x <= max;
 const integer = (x: unknown): x is number => number(x, Number.MAX_SAFE_INTEGER, 0) && Number.isInteger(x);
 const oneOf = (x: unknown, values: readonly unknown[]) => values.includes(x);
 const token = (x: unknown) => typeof x === 'string' && /^[a-f0-9]{64}$/.test(x);
 const uuid = (x: unknown) => typeof x === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(x);
+
+function isInstalledApplication(input: unknown): input is InstalledApplication {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
+  const app = input as Record<string, unknown>;
+  return Object.keys(app).every(key => ['id', 'name', 'icon'].includes(key)) && str(app.id, 2048) && str(app.name, 160) &&
+    (app.icon === undefined || (str(app.icon, 8192) && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(app.icon)));
+}
 
 export function isMessage(input: unknown): input is Message {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
@@ -73,6 +99,22 @@ export function isMessage(input: unknown): input is Message {
     case MessageType.keyboard_up:
       return oneOf(m.key, PROTOCOL.keys) && Array.isArray(m.modifiers) && m.modifiers.length <= 4 && new Set(m.modifiers).size === m.modifiers.length && m.modifiers.every(k => oneOf(k, PROTOCOL.modifiers)) && (m.type !== 'keyboard_down' || typeof m.repeat === 'boolean');
     case MessageType.keyboard_text: return str(m.text, PROTOCOL.maxTextLength);
+    case MessageType.system_action:
+      if (!oneOf(m.action, PROTOCOL.systemActions) || (m.id !== undefined && !str(m.id, 64))) return false;
+      if (m.action === 'open_app') return str(m.id, 64) && str(m.appId, 2048) && !m.appId.includes('\0') && m.command === undefined && m.url === undefined;
+      if (m.action === 'run_command') return str(m.id, 64) && str(m.command, 4096) && m.command.trim().length > 0 && !m.command.includes('\0') && m.appId === undefined && m.url === undefined;
+      if (m.action === 'open_url') return str(m.id, 64) && isOpenUrl(m.url) && m.appId === undefined && m.command === undefined;
+      return m.appId === undefined && m.command === undefined && m.url === undefined;
+    case MessageType.apps_list: return str(m.id, 64) && (m.cursor === undefined || integer(m.cursor));
+    case MessageType.apps_list_result:
+      return str(m.id, 64) && Array.isArray(m.apps) && m.apps.length <= 100 && m.apps.every(isInstalledApplication) &&
+        (m.nextCursor === undefined || integer(m.nextCursor)) && (m.error === undefined || str(m.error, 240));
+    case MessageType.system_action_status: return oneOf(m.action, PROTOCOL.systemActions) && str(m.id, 64);
+    case MessageType.system_action_result:
+      return str(m.id, 64) && oneOf(m.action, PROTOCOL.systemActions) && typeof m.ok === 'boolean' && (m.message === undefined || str(m.message, 240)) &&
+        (m.state === undefined || (m.ok === false && oneOf(m.state, ['running', 'unknown'])));
+    case MessageType.system_adjust:
+      return oneOf(m.control, PROTOCOL.systemControls) && number(m.steps, PROTOCOL.maxSystemAdjustSteps) && Number.isInteger(m.steps) && m.steps !== 0;
     case MessageType.release_all: return true;
     case MessageType.ping:
     case MessageType.pong: return str(m.id, 64);
@@ -90,5 +132,5 @@ export function parseMessage(raw: string): Message | null {
     return isMessage(parsed) ? parsed : null;
   } catch { return null; }
 }
-export const CLIENT_TYPES = [MessageType.authentication, MessageType.mouse_move, MessageType.mouse_scroll, MessageType.mouse_down, MessageType.mouse_up, MessageType.mouse_click, MessageType.mouse_gesture, MessageType.keyboard_down, MessageType.keyboard_up, MessageType.keyboard_text, MessageType.release_all, MessageType.ping] as readonly string[];
+export const CLIENT_TYPES = [MessageType.authentication, MessageType.mouse_move, MessageType.mouse_scroll, MessageType.mouse_down, MessageType.mouse_up, MessageType.mouse_click, MessageType.mouse_gesture, MessageType.keyboard_down, MessageType.keyboard_up, MessageType.keyboard_text, MessageType.system_action, MessageType.system_action_status, MessageType.apps_list, MessageType.system_adjust, MessageType.release_all, MessageType.ping] as readonly string[];
 export function isClientMessage(message: Message): message is ClientMessage { return CLIENT_TYPES.includes(message.type); }

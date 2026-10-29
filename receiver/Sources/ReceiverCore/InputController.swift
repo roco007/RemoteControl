@@ -1,4 +1,13 @@
 import Foundation
+import CryptoKit
+
+public enum SystemAction: String, CaseIterable {
+    case screenshot, killApp = "kill_app", lock, photoBooth = "photo_booth", openApp = "open_app", runCommand = "run_command", openURL = "open_url"
+}
+
+public enum SystemControl: String, CaseIterable {
+    case volume, brightness
+}
 
 public enum InputAction: Equatable {
     case move(Double, Double, dragging: String?)
@@ -6,18 +15,45 @@ public enum InputAction: Equatable {
     case scroll(Double, Double)
     case key(String, down: Bool, modifiers: [String], repeating: Bool)
     case text(String)
+    case system(SystemAction)
+    case openApplication(String)
+    case runCommand(String)
+    case openURL(String)
+    case systemAdjust(SystemControl, steps: Int)
 }
 
-public protocol InputSink: AnyObject { func post(_ action: InputAction) }
+public protocol InputSink: AnyObject {
+    func post(_ action: InputAction)
+    func listApplications(refresh: Bool, completion: @escaping ([InstalledApplication], String?) -> Void)
+    func performSystemAction(_ action: SystemAction, parameters: [String: String], completion: @escaping (Bool, String?) -> Void)
+    func performSystemAction(_ action: SystemAction, completion: @escaping (Bool, String?) -> Void)
+}
+public extension InputSink {
+    func listApplications(refresh: Bool, completion: @escaping ([InstalledApplication], String?) -> Void) { completion([], "Application listing is unavailable.") }
+    func performSystemAction(_ action: SystemAction, parameters: [String: String], completion: @escaping (Bool, String?) -> Void) {
+        switch action {
+        case .openApp: post(.openApplication(parameters["appId"] ?? "")); completion(true, nil)
+        case .runCommand: post(.runCommand(parameters["command"] ?? "")); completion(true, nil)
+        case .openURL: post(.openURL(parameters["url"] ?? "")); completion(true, nil)
+        default: performSystemAction(action, completion: completion)
+        }
+    }
+    /// Synchronous sinks, including the recording integration harness, finish on return.
+    func performSystemAction(_ action: SystemAction, completion: @escaping (Bool, String?) -> Void) {
+        post(.system(action)); completion(true, nil)
+    }
+}
 
 public final class InputController {
     private let sink: InputSink
+    private let actionGate: SystemActionGate
     public private(set) var heldButtons = Set<String>()
     public private(set) var heldKeys = Set<String>()
     private var modifiers: [String] = []
-    public init(sink: InputSink) { self.sink = sink }
+    public init(sink: InputSink, actionGate: SystemActionGate = SystemActionGate()) { self.sink = sink; self.actionGate = actionGate }
 
-    public func handle(_ message: WireMessage) {
+    public func handle(_ message: WireMessage, deviceID: String? = nil, systemActionAllowed: Bool = true,
+                       completion: @escaping (SystemActionOutcome) -> Void = { _ in }) {
         switch message.kind {
         case .mouseMove:
             let dragging = ["left", "right", "middle"].first { heldButtons.contains($0) }
@@ -50,10 +86,33 @@ public final class InputController {
             // Composed Unicode is a separate channel; held shortcuts must not swallow it.
             guard modifiers.isEmpty else { return }
             sink.post(.text(message.string("text")))
+        case .systemAction:
+            guard let action = SystemAction(rawValue: message.string("action")) else { return }
+            var parameters: [String: String] = [:]
+            for key in ["appId", "command", "url"] { if let value = message.fields[key] as? String { parameters[key] = value } }
+            let data = (try? JSONSerialization.data(withJSONObject: parameters, options: [.sortedKeys])) ?? Data()
+            let fingerprint = parameters.isEmpty ? "" : SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            actionGate.perform(device: deviceID, id: message.fields["id"] as? String, action: action, fingerprint: fingerprint, start: { finish in
+                guard systemActionAllowed else { finish(false, "Accessibility permission is required."); return }
+                self.releaseAll()
+                self.sink.performSystemAction(action, parameters: parameters, completion: finish)
+            }, completion: completion)
+        case .systemAdjust:
+            guard let control = SystemControl(rawValue: message.string("control")) else { return }
+            releaseAll()
+            sink.post(.systemAdjust(control, steps: Int(message.number("steps"))))
         case .mouseGesture: gesture(message)
         case .releaseAll: releaseAll()
         default: break
         }
+    }
+
+    public func listApplications(refresh: Bool, completion: @escaping ([InstalledApplication], String?) -> Void) {
+        sink.listApplications(refresh: refresh, completion: completion)
+    }
+
+    public func actionStatus(device: String, id: String, action: SystemAction) -> SystemActionOutcome {
+        actionGate.status(device: device, id: id, action: action)
     }
 
     public func releaseAll() {

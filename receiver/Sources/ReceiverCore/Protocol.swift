@@ -6,9 +6,11 @@ public enum MessageKind: String, CaseIterable {
     case mouseMove = "mouse_move", mouseDown = "mouse_down", mouseUp = "mouse_up", mouseClick = "mouse_click"
     case mouseScroll = "mouse_scroll", mouseGesture = "mouse_gesture"
     case keyboardDown = "keyboard_down", keyboardUp = "keyboard_up", keyboardText = "keyboard_text"
+    case systemAction = "system_action", systemActionResult = "system_action_result", systemActionStatus = "system_action_status", systemAdjust = "system_adjust"
+    case appsList = "apps_list", appsListResult = "apps_list_result"
     case releaseAll = "release_all", ping, pong, error
 
-    public var isClient: Bool { ![.connection, .authenticationResult, .pong, .error].contains(self) }
+    public var isClient: Bool { ![.connection, .authenticationResult, .systemActionResult, .appsListResult, .pong, .error].contains(self) }
 }
 
 public struct WireMessage {
@@ -31,7 +33,9 @@ public enum WireProtocol {
         .authenticationResult: ["ok", "serverId", "permission", "token", "error"],
         .mouseMove: ["dx", "dy"], .mouseScroll: ["dx", "dy"], .mouseDown: ["button"], .mouseUp: ["button"], .mouseClick: ["button", "count"],
         .mouseGesture: ["gesture", "amount", "direction", "fingers"], .keyboardDown: ["key", "modifiers", "repeat"], .keyboardUp: ["key", "modifiers"],
-        .keyboardText: ["text"], .releaseAll: [], .ping: ["id"], .pong: ["id"], .error: ["code", "message"]
+        .keyboardText: ["text"], .systemAction: ["action", "id", "appId", "command", "url"], .systemActionStatus: ["action", "id"], .systemActionResult: ["action", "id", "ok", "message", "state"],
+        .appsList: ["id", "cursor"], .appsListResult: ["id", "apps", "nextCursor", "error"],
+        .systemAdjust: ["control", "steps"], .releaseAll: [], .ping: ["id"], .pong: ["id"], .error: ["code", "message"]
     ]
 
     public static func decode(_ data: Data) throws -> WireMessage {
@@ -70,6 +74,33 @@ public enum WireProtocol {
             let modifiers = m["modifiers"] as? [String]
             valid = member(m["key"], Wire.keys) && modifiers != nil && modifiers!.count <= 4 && Set(modifiers!).count == modifiers!.count && modifiers!.allSatisfy { Wire.modifiers.contains($0) } && (kind != .keyboardDown || boolean(m["repeat"]))
         case .keyboardText: valid = string(m["text"], max: Wire.maxTextLength)
+        case .systemAction:
+            let action = m["action"] as? String
+            let parameters: Bool
+            if action == "open_app" {
+                parameters = string(m["id"], max: 64) && string(m["appId"], max: 2048) && !(m["appId"] as? String ?? "").contains("\0") && m["command"] == nil && m["url"] == nil
+            } else if action == "run_command" {
+                parameters = string(m["id"], max: 64) && string(m["command"], max: 4096) && !(m["command"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !(m["command"] as? String ?? "").contains("\0") && m["appId"] == nil && m["url"] == nil
+            } else if action == "open_url" {
+                parameters = string(m["id"], max: 64) && (m["url"] as? String).flatMap(HTTPURL.parse) != nil && m["appId"] == nil && m["command"] == nil
+            } else { parameters = m["appId"] == nil && m["command"] == nil && m["url"] == nil }
+            valid = member(m["action"], Wire.systemActions) && (m["id"] == nil || string(m["id"], max: 64)) && parameters
+        case .appsList:
+            valid = string(m["id"], max: 64) && (m["cursor"] == nil || integer(m["cursor"]))
+        case .appsListResult:
+            let apps = m["apps"] as? [[String: Any]]
+            valid = string(m["id"], max: 64) && apps != nil && apps!.count <= 100 && apps!.allSatisfy { app in
+                Set(app.keys).isSubset(of: ["id", "name", "icon"]) && string(app["id"], max: 2048) && string(app["name"], max: 160) &&
+                    (app["icon"] == nil || (string(app["icon"], max: 8192) && matches(app["icon"], pattern: "^data:image/png;base64,[A-Za-z0-9+/]+=*$")))
+            } && (m["nextCursor"] == nil || integer(m["nextCursor"])) && (m["error"] == nil || string(m["error"], max: 240))
+        case .systemActionStatus: valid = member(m["action"], Wire.systemActions) && string(m["id"], max: 64)
+        case .systemActionResult:
+            valid = member(m["action"], Wire.systemActions) && string(m["id"], max: 64) && boolean(m["ok"]) &&
+                (m["message"] == nil || string(m["message"], max: 240)) &&
+                (m["state"] == nil || (member(m["state"], ["running", "unknown"]) && m["ok"] as? Bool == false))
+        case .systemAdjust:
+            let steps = numeric(m["steps"])
+            valid = member(m["control"], Wire.systemControls) && steps.map { $0 != 0 && abs($0) <= Double(Wire.maxSystemAdjustSteps) && $0.rounded(.towardZero) == $0 } == true
         case .releaseAll: valid = true
         case .ping, .pong: valid = string(m["id"], max: 64)
         case .error: valid = string(m["code"], max: 64) && string(m["message"], max: 240)

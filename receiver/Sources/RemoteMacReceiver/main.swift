@@ -13,9 +13,12 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
             guard let port = UInt16(configured), port > 0 else { throw StartupError.invalidPort }
             let pairing = try PairingManager(store: KeychainTrustStore())
             let origins = Set((ProcessInfo.processInfo.environment["REMOTE_MAC_ALLOWED_ORIGINS"] ?? "").split(separator: ",").map(String.init))
-            let server = ReceiverServer(port: port, pairing: pairing, sink: NativeInput(), origins: origins, bluetoothEnabled: true)
+            let unlockCredentials = MacUnlockCredentialStore()
+            let input = NativeInput(unlockPassword: unlockCredentials.password)
+            let server = ReceiverServer(port: port, pairing: pairing, sink: input, origins: origins, bluetoothEnabled: true)
             self.server = server
-            let controller = ReceiverWindow(server: server); self.receiverWindow = controller
+            let controller = ReceiverWindow(server: server, unlockCredentials: unlockCredentials); self.receiverWindow = controller
+            input.onLockStatus = { [weak controller] in controller?.showLockStatus($0) }
             server.onUpdate = { [weak self, weak controller] snapshot in
                 controller?.update(snapshot)
                 self?.statusItem?.button?.toolTip = snapshot.deviceName.map { "Remote Mac: \($0) connected via \(snapshot.activeTransport?.rawValue ?? "local connection")" } ?? "Remote Mac: Wi-Fi \(snapshot.status) · Bluetooth \(snapshot.bluetoothStatus)"
@@ -28,7 +31,10 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(.separator())
             menu.addItem(withTitle: "Quit Remote Mac Control", action: #selector(quit), keyEquivalent: "q").target = self
             item.menu = menu; statusItem = item
-            sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak server] _ in server?.disconnectController() }
+            sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak input, weak server] _ in
+                input?.cancelForSystemSleep()
+                server?.disconnectController()
+            }
             server.start(); showWindow()
         } catch {
             let alert = NSAlert(); alert.messageText = "Remote Mac Control could not start"; alert.informativeText = error.localizedDescription; alert.runModal()

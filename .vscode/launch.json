@@ -9,6 +9,13 @@
       "cwd": "${workspaceFolder}/transmitter"
     },
     {
+      "name": "Transmitter: Sync to Android via USB",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "python3 .vscode/sync-android-usb.py",
+      "cwd": "${workspaceFolder}"
+    },
+    {
       "name": "Receiver: Sync latest code and restart",
       "type": "node-terminal",
       "request": "launch",

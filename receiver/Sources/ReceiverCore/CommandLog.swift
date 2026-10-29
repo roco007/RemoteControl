@@ -34,6 +34,14 @@ public enum ReceiverCommandLog {
                 command["textLength"] = message.string("text").utf16.count
                 command["text"] = "<redacted>"
             }
+            if command["command"] != nil {
+                command["commandLength"] = message.string("command").utf16.count
+                command["command"] = "<redacted>"
+            }
+            if command["url"] != nil {
+                command["urlLength"] = message.string("url").utf16.count
+                command["url"] = "<redacted>"
+            }
             record["command"] = command
         }
         // Invalid/rate-limited payloads are never copied into logs, even partially.

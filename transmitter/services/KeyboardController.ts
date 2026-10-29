@@ -13,6 +13,7 @@ export class KeyboardController {
   private repeatTimers = new Map<Key, ReturnType<typeof setTimeout>>();
   private capsLock = false;
   private listeners = new Set<() => void>();
+  private pressGeneration = 0;
 
   constructor(private send: InputSender) {}
   getModifiers = (): Modifier[] => [...this.modifiers];
@@ -22,6 +23,27 @@ export class KeyboardController {
     return () => { this.listeners.delete(listener); };
   };
   private notify() { this.listeners.forEach(listener => listener()); }
+
+  /** A character commits only after a confirmed tap or long press, never on press-out. */
+  characterPress = (key: Key) => {
+    const generation = this.pressGeneration;
+    let completed = false;
+    const commit = (alternate: boolean) => {
+      if (completed || generation !== this.pressGeneration) return;
+      completed = true;
+      if (isModifier(key) || this.held.has(key)) return;
+      const previous = this.getModifiers();
+      let modifiers = previous;
+      if (alternate) {
+        const needsShift = !(/^[a-z]$/.test(key) && this.capsLock);
+        modifiers = previous.filter(modifier => modifier !== 'shift');
+        if (needsShift) modifiers.push('shift');
+      }
+      if (this.send({ type: MessageType.keyboard_down, key, modifiers, repeat: false }) === false) return;
+      this.send({ type: MessageType.keyboard_up, key, modifiers: previous });
+    };
+    return { tap: () => commit(false), alternate: () => commit(true), cancel: () => { completed = true; } };
+  };
 
   press = (key: Key): void => {
     if (this.held.has(key) || isModifier(key)) return;
@@ -88,6 +110,7 @@ export class KeyboardController {
   };
 
   reset = (): void => {
+    ++this.pressGeneration;
     const changed = this.modifiers.size > 0;
     this.repeatTimers.forEach(timer => clearTimeout(timer)); this.repeatTimers.clear();
     this.held.clear(); this.modifiers.clear();

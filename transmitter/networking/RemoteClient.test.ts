@@ -34,6 +34,48 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe('connection and pairing', () => {
+  it('gates fine adjustments on receiver support, authentication and permission', async () => {
+    const { client, sockets } = setup(token);
+    const adjustment: ClientPayload = { type: 'system_adjust', control: 'volume', steps: -2 };
+    expect(client.send(adjustment)).toBe(false);
+    await client.connect({ host: 'mac.local', port: 9876 });
+    const socket = sockets[0]!; await hello(socket); await ready(socket);
+    expect(client.send(adjustment)).toBe(false);
+    expect(socket.sent.some(message => message.type === 'system_adjust')).toBe(false);
+    await socket.receive({ type: 'connection', state: 'ready', serverId, name: 'My Mac', permission: true, capabilities: ['system_adjust'] });
+    expect(client.send(adjustment)).toBe(true);
+    expect(socket.sent.at(-1)).toMatchObject(adjustment);
+    await socket.receive({ type: 'connection', state: 'permission_required', serverId, name: 'My Mac', permission: false, capabilities: ['system_adjust'] });
+    expect(client.send(adjustment)).toBe(false);
+    await socket.receive({ type: 'connection', state: 'ready', serverId, name: 'My Mac', permission: true, capabilities: [] });
+    expect(client.send(adjustment)).toBe(false);
+    client.dispose();
+  });
+  it('requires tracked dispatch even when receivers advertise system actions', async () => {
+    const { client, sockets } = setup(token);
+    await client.connect({ host: 'mac.local', port: 9876 });
+    const socket = sockets[0]!; await hello(socket); await ready(socket);
+    expect(client.send({ type: 'system_action', action: 'kill_app' })).toBe(false);
+    expect(socket.sent.some(message => message.type === 'system_action')).toBe(false);
+    await socket.receive({ type: 'connection', state: 'ready', serverId, name: 'My Mac', permission: true, capabilities: ['system_actions'] });
+    expect(client.send({ type: 'system_action', action: 'screenshot' })).toBe(false);
+    await expect(client.performSystemAction('screenshot', 'unsupported')).rejects.toMatchObject({ delivery: 'not_sent' });
+    client.disconnect();
+    expect(client.send({ type: 'system_action', action: 'lock' })).toBe(false);
+    client.dispose();
+  });
+  it('exposes receiver capabilities and clears them before connecting to another receiver', async () => {
+    const { client, sockets } = setup(token);
+    await client.connect({ host: 'mac.local', port: 9876 });
+    await sockets[0]!.receive({ type: 'connection', state: 'hello', serverId, name: 'My Mac', permission: true, capabilities: ['system_actions'] });
+    await ready(sockets[0]!);
+    expect(client.getSnapshot().capabilities).toEqual(['system_actions']);
+    await client.connect({ host: 'other.local', port: 9876 });
+    expect(client.getSnapshot().capabilities).toEqual([]);
+    await hello(sockets[1]!); await ready(sockets[1]!);
+    expect(client.getSnapshot().capabilities).toEqual([]);
+    client.dispose();
+  });
   it('requires authentication before input and securely stores a successful token', async () => {
     const { client, sockets, store } = setup(); await client.connect({ host: 'mac.local', port: 9876 }); const socket = sockets[0]!;
     expect(client.send({ type: 'mouse_move', dx: 1, dy: 1 })).toBe(false);

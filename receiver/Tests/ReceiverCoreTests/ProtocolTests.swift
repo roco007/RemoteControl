@@ -23,6 +23,7 @@ final class ProtocolTests {
     @Test func testEnvelopeRejectsBooleanSequence() {
         expectThrows(try WireProtocol.validate(["v":1,"seq":true,"timestamp":123,"type":"release_all"]))
     }
+    @Test func testSystemActionsStayInSyncWithManifest() { expectEqual(Set(SystemAction.allCases.map(\.rawValue)), Set(Wire.systemActions)) }
     @Test func testTypesStayInSyncWithManifest() { expectEqual(Set(MessageKind.allCases.map(\.rawValue)), Set(Wire.messageTypes)) }
     @Test func testPrivatePeersOnly() {
         for address: [UInt8] in [[127,0,0,1],[10,1,2,3],[172,31,2,3],[192,168,2,3],[169,254,2,3]] { expectTrue(LocalNetwork.isPrivateIPv4(address)) }

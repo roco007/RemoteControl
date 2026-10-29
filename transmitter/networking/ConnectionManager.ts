@@ -1,11 +1,12 @@
-import { isClientMessage, parseMessage, type ClientPayload } from '../../shared/protocol';
+import { isClientMessage, parseMessage, type ClientPayload, type SystemAction } from '../../shared/protocol';
 import type { BleBridge } from '../modules/bluetooth-transport';
-import { RemoteClient } from './RemoteClient';
+import { RemoteClient, type SystemActionParameters } from './RemoteClient';
 import { BluetoothTransport } from './BluetoothTransport';
 import { WiFiTransport } from './WiFiTransport';
 import { normalizeEndpoint, type Endpoint } from './endpoint';
 import type { BluetoothPeer, Transport, TransportFactory, TransportKind, TransportMode, TransportTarget } from './Transport';
 import type { ConnectionSnapshot, CredentialStore, SocketFactory } from './types';
+import { SystemActionDispatchError } from './types';
 
 export interface ConnectionConfiguration { mode: TransportMode; endpoint?: Endpoint; bluetooth?: BluetoothPeer }
 interface Options {
@@ -110,18 +111,18 @@ export class ConnectionManager {
     this.retryTimer = setTimeout(() => { if (gen === this.generation) void this.open(kind); }, delay);
   };
   private scheduleProbe() {
-    if (this.config.mode !== 'automatic' || !this.config.endpoint || !this.desired || !this.active || this.probe || this.probeTimer) return;
+    if (this.snapshot.systemAction || this.config.mode !== 'automatic' || !this.config.endpoint || !this.desired || !this.active || this.probe || this.probeTimer) return;
     this.probeTimer = setTimeout(() => { this.probeTimer = undefined; this.startProbe(); }, 15_000);
   }
   private startProbe() {
-    if (!this.desired || !this.active || this.snapshot.transport !== 'bluetooth' || this.config.mode !== 'automatic' || !this.config.endpoint) return;
+    if (this.snapshot.systemAction || !this.desired || !this.active || this.snapshot.transport !== 'bluetooth' || this.config.mode !== 'automatic' || !this.config.endpoint) return;
     const gen = this.generation;
     try {
       const probe = this.factory({ kind: 'wifi', endpoint: normalizeEndpoint(this.config.endpoint) }); this.probe = probe;
       const finish = (available: boolean) => {
         if (this.probe !== probe || gen !== this.generation) return;
         this.closeProbe();
-        if (available) void this.open('wifi'); else this.scheduleProbe();
+        if (available && !this.snapshot.systemAction) void this.open('wifi'); else this.scheduleProbe();
       };
       probe.onMessage = raw => {
         const message = typeof raw === 'string' ? parseMessage(raw) : null;
@@ -143,6 +144,12 @@ export class ConnectionManager {
     this.closeProbe();
   }
   send = (payload: ClientPayload) => this.desired && this.active && this.client.send(payload);
+  performSystemAction = (action: SystemAction, id: string, parameters?: SystemActionParameters) => this.desired && this.active
+    ? this.client.performSystemAction(action, id, parameters)
+    : Promise.reject(new SystemActionDispatchError('not_sent', 'Connect to your Mac before using gestures.'));
+  listInstalledApps = () => this.client.listInstalledApps();
+  trackSystemAction = (action: SystemAction, id: string, serverId?: string, deviceId?: string) => this.client.trackSystemAction(action, id, serverId, deviceId);
+  resumeSystemActions = (id: string, nativeResetConfirmed = false) => this.client.resumeSystemActions(id, nativeResetConfirmed);
   pair = (code: string) => this.client.pair(code);
   disconnect = () => {
     this.desired = false; ++this.generation; this.clearTimers(); this.client.disconnect();

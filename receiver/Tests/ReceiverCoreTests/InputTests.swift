@@ -7,6 +7,33 @@ func message(_ kind: MessageKind, _ fields: [String: Any] = [:], seq: Int64 = 1)
     try WireProtocol.decode(WireProtocol.encode(kind, seq: seq, fields: fields))
 }
 final class InputTests {
+    @Test(arguments: [SystemControl.volume, SystemControl.brightness], [-16, -1, 1, 16])
+    func testSystemAdjustmentsPreserveSignedStepsAndReleaseHeldInput(_ control: SystemControl, _ steps: Int) throws {
+        let sink = RecordingSink(); let input = InputController(sink: sink)
+        input.handle(try message(.mouseDown, ["button": "left"]))
+        input.handle(try message(.keyboardDown, ["key": "command", "modifiers": ["command"], "repeat": false]))
+        input.handle(try message(.systemAdjust, ["control": control.rawValue, "steps": steps]))
+        expectTrue(input.heldButtons.isEmpty)
+        expectTrue(input.heldKeys.isEmpty)
+        expectEqual(Array(sink.actions.suffix(3)), [
+            .button("left", down: false, clickCount: 1),
+            .key("command", down: false, modifiers: [], repeating: false),
+            .systemAdjust(control, steps: steps)
+        ])
+    }
+    @Test(arguments: ["screenshot", "kill_app", "lock", "photo_booth"])
+    func testSystemActionReleasesHeldInputBeforeDispatch(_ action: String) throws {
+        let sink = RecordingSink(); let input = InputController(sink: sink)
+        input.handle(try message(.mouseDown, ["button": "left"]))
+        input.handle(try message(.keyboardDown, ["key": "shift", "modifiers": ["shift"], "repeat": false]))
+        input.handle(try message(.systemAction, ["action": action]))
+        expectTrue(input.heldButtons.isEmpty)
+        expectTrue(input.heldKeys.isEmpty)
+        expectEqual(sink.actions.count, 5)
+        expectEqual(sink.actions.last, .system(try unwrap(SystemAction(rawValue: action))))
+        expectEqual(Array(sink.actions.dropFirst(2).prefix(2)), [.button("left", down: false, clickCount: 1), .key("shift", down: false, modifiers: [], repeating: false)])
+    }
+
     @Test func testCapsLockReconcilesPhysicalChangesAndPreservesRemoteToggle() {
         var state = CapsLockState(initial: false, physical: false)
         expectTrue(state.resolve(physical: false, remoteToggle: true))

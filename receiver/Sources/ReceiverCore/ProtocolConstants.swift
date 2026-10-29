@@ -9,9 +9,12 @@ public enum Wire {
     public static let maxMessageBytes = 16384
     public static let maxDelta = 1000
     public static let maxTextLength = 1024
-    public static let messageTypes = ["connection","authentication","authentication_result","mouse_move","mouse_down","mouse_up","mouse_click","mouse_scroll","mouse_gesture","keyboard_down","keyboard_up","keyboard_text","release_all","ping","pong","error"]
+    public static let maxSystemAdjustSteps = 16
+    public static let messageTypes = ["connection","authentication","authentication_result","mouse_move","mouse_down","mouse_up","mouse_click","mouse_scroll","mouse_gesture","keyboard_down","keyboard_up","keyboard_text","system_action","system_action_status","system_action_result","system_adjust","release_all","ping","pong","error","apps_list","apps_list_result"]
     public static let buttons = ["left","right","middle"]
     public static let modifiers = ["shift","control","option","command"]
+    public static let systemControls = ["volume","brightness"]
+    public static let systemActions = ["screenshot","kill_app","lock","photo_booth","open_app","run_command","open_url"]
     public static let gestures = ["zoom","swipe"]
     public static let directions = ["left","right","up","down"]
     public static let keys = ["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","0","1","2","3","4","5","6","7","8","9","space","enter","backspace","delete","tab","escape","shift","control","option","command","caps_lock","left","right","up","down","home","end","page_up","page_down","f1","f2","f3","f4","f5","f6","f7","f8","f9","f10","f11","f12","minus","equal","bracket_left","bracket_right","backslash","semicolon","quote","comma","period","slash","backtick"]

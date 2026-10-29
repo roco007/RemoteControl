@@ -8,6 +8,19 @@
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "Transmitter: Sync to Android via USB",
+			"type": "process",
+			"command": "python3",
+			"args": ["${workspaceFolder}/.vscode/sync-android-usb.py"],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"runOptions": {
+				"instanceLimit": 1
+			}
 		}
 	]
 }
